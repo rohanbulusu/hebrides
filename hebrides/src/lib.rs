@@ -1734,12 +1734,11 @@ impl Complex {
         self.powf(0.5)
     }
 
-    fn imag_exp(phi: Num) -> Self {
-        Complex::new(phi.cos(), phi.sin())
-    }
-
     pub fn exp(&self) -> Self {
-        todo!()
+        let real_exp = Complex::from_real(self.real.exp());
+        let imag_exp = Complex::from_real(self.imag.cos())
+            + Complex::from_real(self.imag).sin() * Complex::i();
+        real_exp + imag_exp
     }
 
     pub fn neg_exp(&self) -> Self {
@@ -1747,27 +1746,38 @@ impl Complex {
     }
 
     pub fn log(&self, base: f64) -> Self {
-        todo!()
+        self.ln() / Complex::from_real(Num::F64(base)).ln()
     }
 
     pub fn log10(&self) -> Self {
-        todo!()
+        self.log(10.0)
     }
 
     pub fn log2(&self) -> Self {
-        todo!()
+        self.log(2.0)
     }
 
+    #[allow(unconditional_recursion)]
     pub fn ln(&self) -> Self {
-        todo!()
+        let real_part = Complex::from_real(self.real).ln();
+        let imag_part = self.azimuthal(DegreesType::Degrees) * Complex::i();
+        real_part + imag_part
     }
 
     pub fn sin(&self) -> Self {
-        todo!()
+        let num = (*self * Complex::i()).exp() - (-*self * Complex::i()).exp();
+        let den = Complex::from_real(Num::U8(2)) * Complex::i();
+        num / den
     }
 
     pub fn cos(&self) -> Self {
-        todo!()
+        let num = (*self * Complex::i()).exp() + (-*self * Complex::i()).exp();
+        let den = Complex::from_real(Num::U8(2));
+        num / den
+    }
+
+    pub fn tan(&self) -> Self {
+        self.sin() / self.cos()
     }
 
     pub fn is_zero(&self) -> bool {
@@ -1779,24 +1789,188 @@ impl Complex {
     }
 }
 
+impl std::fmt::Display for Complex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} + {}i", self.real, self.imag)
+    }
+}
+
+impl PartialEq for Complex {
+    fn eq(&self, other: &Self) -> bool {
+        self.real == other.real && self.imag == other.imag
+    }
+}
+
+impl Eq for Complex {}
+
+macro_rules! impl_complex_from_primitives {
+    ($t:ty, $num_variant:expr) => {
+        impl From<($t, $t)> for Complex {
+            fn from(value: ($t, $t)) -> Self {
+                Complex::new($num_variant(value.0), $num_variant(value.1))
+            }
+        }
+    };
+    ($left_t:ty, $left_variant:expr, $right_t:ty, $right_variant:expr) => {
+        impl From<($left_t, $right_t)> for Complex {
+            fn from(value: ($left_t, $right_t)) -> Self {
+                Complex::new($left_variant(value.0), $right_variant(value.1))
+            }
+        }
+    };
+}
+
+impl_complex_from_primitives![u8, Num::U8];
+impl_complex_from_primitives![u8, Num::U8, u16, Num::U16];
+impl_complex_from_primitives![u8, Num::U8, u32, Num::U32];
+impl_complex_from_primitives![u8, Num::U8, u64, Num::U64];
+impl_complex_from_primitives![u8, Num::U8, i8, Num::I8];
+impl_complex_from_primitives![u8, Num::U8, i16, Num::I16];
+impl_complex_from_primitives![u8, Num::U8, i32, Num::I32];
+impl_complex_from_primitives![u8, Num::U8, i64, Num::I64];
+impl_complex_from_primitives![u8, Num::U8, f32, Num::F32];
+impl_complex_from_primitives![u8, Num::U8, f64, Num::F64];
+
+impl_complex_from_primitives![u16, Num::U16];
+impl_complex_from_primitives![u16, Num::U16, u8, Num::U8];
+impl_complex_from_primitives![u16, Num::U16, u32, Num::U32];
+impl_complex_from_primitives![u16, Num::U16, u64, Num::U64];
+impl_complex_from_primitives![u16, Num::U16, i8, Num::I8];
+impl_complex_from_primitives![u16, Num::U16, i16, Num::I16];
+impl_complex_from_primitives![u16, Num::U16, i32, Num::I32];
+impl_complex_from_primitives![u16, Num::U16, i64, Num::I64];
+impl_complex_from_primitives![u16, Num::U16, f32, Num::F32];
+impl_complex_from_primitives![u16, Num::U16, f64, Num::F64];
+
+impl_complex_from_primitives![u32, Num::U32];
+impl_complex_from_primitives![u32, Num::U32, u8, Num::U8];
+impl_complex_from_primitives![u32, Num::U32, u16, Num::U16];
+impl_complex_from_primitives![u32, Num::U32, u64, Num::U64];
+impl_complex_from_primitives![u32, Num::U32, i8, Num::I8];
+impl_complex_from_primitives![u32, Num::U32, i16, Num::I16];
+impl_complex_from_primitives![u32, Num::U32, i32, Num::I32];
+impl_complex_from_primitives![u32, Num::U32, i64, Num::I64];
+impl_complex_from_primitives![u32, Num::U32, f32, Num::F32];
+impl_complex_from_primitives![u32, Num::U32, f64, Num::F64];
+
+impl_complex_from_primitives![u64, Num::U64];
+impl_complex_from_primitives![u64, Num::U64, u8, Num::U8];
+impl_complex_from_primitives![u64, Num::U64, u16, Num::U16];
+impl_complex_from_primitives![u64, Num::U64, u32, Num::U32];
+impl_complex_from_primitives![u64, Num::U64, i8, Num::I8];
+impl_complex_from_primitives![u64, Num::U64, i16, Num::I16];
+impl_complex_from_primitives![u64, Num::U64, i32, Num::I32];
+impl_complex_from_primitives![u64, Num::U64, i64, Num::I64];
+impl_complex_from_primitives![u64, Num::U64, f32, Num::F32];
+impl_complex_from_primitives![u64, Num::U64, f64, Num::F64];
+
+impl_complex_from_primitives![i8, Num::I8];
+impl_complex_from_primitives![i8, Num::I8, u8, Num::U8];
+impl_complex_from_primitives![i8, Num::I8, u16, Num::U16];
+impl_complex_from_primitives![i8, Num::I8, u32, Num::U32];
+impl_complex_from_primitives![i8, Num::I8, u64, Num::U64];
+impl_complex_from_primitives![i8, Num::I8, i16, Num::I16];
+impl_complex_from_primitives![i8, Num::I8, i32, Num::I32];
+impl_complex_from_primitives![i8, Num::I8, i64, Num::I64];
+impl_complex_from_primitives![i8, Num::I8, f32, Num::F32];
+impl_complex_from_primitives![i8, Num::I8, f64, Num::F64];
+
+impl_complex_from_primitives![i16, Num::I16];
+impl_complex_from_primitives![i16, Num::I16, u8, Num::U8];
+impl_complex_from_primitives![i16, Num::I16, u16, Num::U16];
+impl_complex_from_primitives![i16, Num::I16, u32, Num::U32];
+impl_complex_from_primitives![i16, Num::I16, u64, Num::U64];
+impl_complex_from_primitives![i16, Num::I16, i8, Num::I8];
+impl_complex_from_primitives![i16, Num::I16, i32, Num::I32];
+impl_complex_from_primitives![i16, Num::I16, i64, Num::I64];
+impl_complex_from_primitives![i16, Num::I16, f32, Num::F32];
+impl_complex_from_primitives![i16, Num::I16, f64, Num::F64];
+
+impl_complex_from_primitives![i32, Num::I32];
+impl_complex_from_primitives![i32, Num::I32, u8, Num::U8];
+impl_complex_from_primitives![i32, Num::I32, u16, Num::U16];
+impl_complex_from_primitives![i32, Num::I32, u32, Num::U32];
+impl_complex_from_primitives![i32, Num::I32, u64, Num::U64];
+impl_complex_from_primitives![i32, Num::I32, i8, Num::I8];
+impl_complex_from_primitives![i32, Num::I32, i16, Num::I16];
+impl_complex_from_primitives![i32, Num::I32, i64, Num::I64];
+impl_complex_from_primitives![i32, Num::I32, f32, Num::F32];
+impl_complex_from_primitives![i32, Num::I32, f64, Num::F64];
+
+impl_complex_from_primitives![i64, Num::I64];
+impl_complex_from_primitives![i64, Num::I64, u8, Num::U8];
+impl_complex_from_primitives![i64, Num::I64, u16, Num::U16];
+impl_complex_from_primitives![i64, Num::I64, u32, Num::U32];
+impl_complex_from_primitives![i64, Num::I64, u64, Num::U64];
+impl_complex_from_primitives![i64, Num::I64, i8, Num::I8];
+impl_complex_from_primitives![i64, Num::I64, i16, Num::I16];
+impl_complex_from_primitives![i64, Num::I64, i32, Num::I32];
+impl_complex_from_primitives![i64, Num::I64, f32, Num::F32];
+impl_complex_from_primitives![i64, Num::I64, f64, Num::F64];
+
+impl_complex_from_primitives![f32, Num::F32];
+impl_complex_from_primitives![f32, Num::F32, u8, Num::U8];
+impl_complex_from_primitives![f32, Num::F32, u16, Num::U16];
+impl_complex_from_primitives![f32, Num::F32, u32, Num::U32];
+impl_complex_from_primitives![f32, Num::F32, u64, Num::U64];
+impl_complex_from_primitives![f32, Num::F32, i8, Num::I8];
+impl_complex_from_primitives![f32, Num::F32, i16, Num::I16];
+impl_complex_from_primitives![f32, Num::F32, i32, Num::I32];
+impl_complex_from_primitives![f32, Num::F32, i64, Num::I64];
+impl_complex_from_primitives![f32, Num::F32, f64, Num::F64];
+
+impl_complex_from_primitives![f64, Num::F64];
+impl_complex_from_primitives![f64, Num::F64, u8, Num::U8];
+impl_complex_from_primitives![f64, Num::F64, u16, Num::U16];
+impl_complex_from_primitives![f64, Num::F64, u32, Num::U32];
+impl_complex_from_primitives![f64, Num::F64, u64, Num::U64];
+impl_complex_from_primitives![f64, Num::F64, i8, Num::I8];
+impl_complex_from_primitives![f64, Num::F64, i16, Num::I16];
+impl_complex_from_primitives![f64, Num::F64, i32, Num::I32];
+impl_complex_from_primitives![f64, Num::F64, i64, Num::I64];
+impl_complex_from_primitives![f64, Num::F64, f32, Num::F32];
+
 impl Add<Self> for Complex {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        todo!()
+        let real_sum = self.real + other.real;
+        let imag_sum = self.imag + other.imag;
+        Complex::new(real_sum, imag_sum)
+    }
+}
+
+impl Sub<Self> for Complex {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        let real_diff = self.real - other.real;
+        let imag_diff = self.imag - other.imag;
+        Complex::new(real_diff, imag_diff)
     }
 }
 
 impl Mul<Self> for Complex {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
-        todo!()
+        let real_part = self.real * other.real - self.imag * other.imag;
+        let imag_part = self.real * other.imag + self.imag * other.real;
+        Complex::new(real_part, imag_part)
     }
 }
 
 impl Div<Self> for Complex {
     type Output = Self;
     fn div(self, other: Self) -> Self {
-        todo!()
+        let den = other.real.squared() + other.imag.squared();
+        let real_part = (self.real * other.real + self.imag * other.imag) / den;
+        let imag_part = (self.imag * other.real - self.real * other.imag) / den;
+        Complex::new(real_part, imag_part)
+    }
+}
+
+impl Neg for Complex {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Complex::new(-self.real, -self.imag)
     }
 }
 
