@@ -1,2221 +1,754 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
+//! Implementations for real and complex numbers.
+//!
+//! `Hebrides` provides two main structs: Real and Complex, which together
+//! form the basis of the Marlin ecocystem, which as a whole constitutes the
+//! whole of the implementation of DOSs in Rust.
 
-#[derive(Debug, Copy, Clone)]
-pub enum Num {
-    USIZE(usize),
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-    I8(i8),
-    I16(i16),
-    I32(i32),
-    I64(i64),
-    F32(f32),
-    F64(f64),
+#![deny(rust_2018_idioms, missing_docs)]
+
+use std::ops::{Add, Sub, Mul, Div, Neg};
+
+/// Evaluates approximate equality betwen two values.
+/// 
+/// ```
+/// # use hebrides::approx_eq;
+/// approx_eq![0.3*0.2, 0.06];
+/// ```
+#[macro_export]
+macro_rules! approx_eq {
+    ($a:expr, $b:expr) => {
+        ($a - $b) <= f64::EPSILON
+    }
 }
 
-macro_rules! is_positive {
-    ($value:expr, $t:ty) => {{
-        if $value <= (0 as $t) {
-            return false;
-        }
-        true
-    }};
+/// Error type for errors involving domain restrictions.
+#[derive(Debug, Clone)]
+pub struct DomainError;
+
+impl std::fmt::Display for DomainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "evaluation error due to domain restriction")
+    }
 }
 
-macro_rules! powi_without_overflow {
-    ($value:expr, $n:expr, $num_variant:expr) => {{
-        if $n > 0 {
-            let (result, overflowed) = $value.overflowing_pow($n as u32);
-            if !overflowed {
-                return $num_variant(result);
-            }
-        }
-        Num::F64(($value as f64).powi($n))
-    }};
+/// Error type for errors involving conversion between values.
+#[derive(Debug, Clone)]
+pub struct ConversionError;
+
+impl std::fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "conversion error due to invalid predicate")
+    }
 }
 
-impl Num {
-    pub fn zero() -> Self {
-        Num::U8(0)
+/// Representation of angular values.
+///
+/// Angles are often described in either radians or degrees. This datatype is
+/// a unitless value that allows conversion to either unit system.
+pub struct Angle {
+    radian_form: Option<f64>,
+    degree_form: Option<f64>
+}
+
+impl Angle {
+
+    /// Converts a `value` in radians into a value in degrees
+    ///
+    /// ```
+    /// # use hebrides::Angle;
+    /// assert_eq!(Angle::into_degrees(std::f64::consts::FRAC_PI_2), 90.0);
+    /// ```
+    pub fn into_degrees(value: f64) -> f64 {
+        value * 180.0 / std::f64::consts::PI
     }
 
-    pub fn one() -> Self {
-        Num::U8(1)
+    /// Converts a `value` in degrees into a value in radians
+    ///
+    /// ```
+    /// # use hebrides::Angle;
+    /// assert_eq!(Angle::into_radians(90.0), std::f64::consts::FRAC_PI_2);
+    /// ```
+    pub fn into_radians(value: f64) -> f64 {
+        value * std::f64::consts::PI / 180.0
     }
 
+    /// Constructs an Angle from a given value in radians
+    pub fn from_radians(radian_value: f64) -> Self {
+        Angle {
+            radian_form: Some(radian_value),
+            degree_form: None
+        }
+    }
+
+    /// Constructs an Angle from a given value in degrees
+    pub fn from_degrees(degree_value: f64) -> Self {
+        Angle {
+            radian_form: None,
+            degree_form: Some(degree_value)
+        }
+    }
+
+    /// Consumes `self`, returning a value in radians.
+    /// 
+    /// ```
+    /// # use hebrides::Angle;
+    /// let theta = Angle::from_degrees(90.0);
+    /// assert_eq!(theta.to_radians(), std::f64::consts::FRAC_PI_2);
+    /// ```
+    pub fn to_radians(self) -> f64 {
+        match self.radian_form {
+            Some(in_radians) => in_radians,
+            None => Angle::into_radians(self.degree_form.unwrap())
+        }
+    }
+
+    /// Consumes `self`, returning a value in degrees.
+    ///
+    /// ```
+    /// # use hebrides::Angle;
+    /// let theta = Angle::from_radians(std::f64::consts::FRAC_PI_2);
+    /// assert_eq!(theta.to_degrees(), 90.0);
+    /// ```
+    pub fn to_degrees(self) -> f64 {
+        match self.degree_form {
+            Some(in_degrees) => in_degrees,
+            None => Angle::into_degrees(self.radian_form.unwrap())
+        }
+    }
+
+}
+
+/// Representation of real numbers.
+///
+/// Real numbers can be thought of, without loss of generality, as the set of
+/// integers union the set of rationals union the set of irrationals. The only
+/// primitive data type native to Rust that is able to represent all three of 
+/// these classes is f64 (not counting the impossibility of completely 
+/// describing irrational numbers as decimals), which is why it's used as the
+/// struct's internal representation of real values.
+#[derive(Copy, Clone, Debug)]
+pub struct Real {
+    inner: f64
+}
+
+impl Real {
+
+    /// shortcut for describing Real::new(0.0)
+    pub const ONE: Real = Real { inner: 1.0 };
+
+    /// shortcut for describing Real::new(1.0)
+    pub const ZERO: Real = Real { inner: 0.0 };
+
+    /// Constructs a Real from an f64.
+    pub fn new(inner: f64) -> Self {
+        Real { inner }
+    }
+
+    /// Whether or not `self` is positive.
+    /// 
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(0.4);
+    /// assert!(x.positive());
+    /// let y = Real::new(-0.4);
+    /// assert!(!y.positive());
+    /// ```
+    pub fn positive(&self) -> bool {
+        if self.inner > 0.0 {
+            return true;
+        }
+        false
+    }
+
+    /// Whether or not `self` is negative.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(0.5);
+    /// assert!(!x.negative());
+    /// let y = Real::new(-0.5);
+    /// assert!(y.negative());
+    /// ```
+    pub fn negative(&self) -> bool {
+        if self.inner < 0.0 {
+            return true;
+        }
+        false
+    }
+
+    /// Absolute value of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::ONE;
+    /// assert_eq!(x.abs(), Real::ONE);
+    /// let y = -Real::ONE;
+    /// assert_eq!(y.abs(), Real::ONE);
+    /// ```
     pub fn abs(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::USIZE(*value),
-            Num::U8(value) => Num::U8(*value),
-            Num::U16(value) => Num::U16(*value),
-            Num::U32(value) => Num::U32(*value),
-            Num::U64(value) => Num::U64(*value),
-            Num::I8(value) => Num::U8(value.unsigned_abs()),
-            Num::I16(value) => Num::U16(value.unsigned_abs()),
-            Num::I32(value) => Num::U32(value.unsigned_abs()),
-            Num::I64(value) => Num::U64(value.unsigned_abs()),
-            Num::F32(value) => Num::F32(value.abs()),
-            Num::F64(value) => Num::F64(value.abs()),
-        }
+        Real::new(self.inner.abs())
     }
 
-    pub fn powi(&self, n: i32) -> Self {
-        match self {
-            Num::USIZE(value) => {
-                if n > 0 {
-                    return Num::USIZE(value.pow(n as u32));
-                }
-                Num::F64((*value as f64).powi(n))
-            }
-            Num::U8(value) => powi_without_overflow![*value, n, Num::U8],
-            Num::U16(value) => powi_without_overflow![*value, n, Num::U16],
-            Num::U32(value) => powi_without_overflow![*value, n, Num::U32],
-            Num::U64(value) => powi_without_overflow![*value, n, Num::U64],
-            Num::I8(value) => powi_without_overflow![*value, n, Num::I8],
-            Num::I16(value) => powi_without_overflow![*value, n, Num::I16],
-            Num::I32(value) => powi_without_overflow![*value, n, Num::I32],
-            Num::I64(value) => powi_without_overflow![*value, n, Num::I64],
-            Num::F32(value) => Num::F64((*value as f64).powi(n)),
-            Num::F64(value) => Num::F64((*value).powi(n)),
-        }
+    /// Returns the ceiling of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(0.02342);
+    /// assert_eq!(x.ceil(), Real::ONE);
+    /// ```
+    pub fn ceil(&self) -> Self {
+        Real::new(self.inner.ceil())
     }
 
+    /// Returns the floor of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(0.02322);
+    /// assert_eq!(x.floor(), Real::ZERO);
+    /// ```
+    pub fn floor(&self) -> Self {
+        Real::new(self.inner.floor())
+    }
+
+    /// Sine.
+    /// 
+    /// ```
+    /// # use hebrides::Real;
+    /// let theta = Real::new(std::f64::consts::PI);
+    /// assert_eq!(theta.sin(), Real::ZERO);
+    /// ```
+    pub fn sin(&self) -> Self {
+        Real::new(self.inner.sin())
+    }
+
+    /// Cosine.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let theta = Real::new(std::f64::consts::PI);
+    /// assert_eq!(theta.cos(), Real::ONE);
+    /// ```
+    pub fn cos(&self) -> Self {
+        Real::new(self.inner.cos())
+    }
+
+    /// Tangent.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let theta = Real::new(std::f64::consts::FRAC_PI_4);
+    /// assert_eq!(theta.tan(), Real::ONE);
+    /// ```
+    pub fn tan(&self) -> Self {
+        Real::new(self.inner.tan())
+    }
+
+    /// Arcsine.
+    ///
+    /// Inputs to arcsin must be between negative one and one; its
+    /// range extends from [pi/2, -pi/2].
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let h = Real::new(4.0 / 5.0);
+    /// assert_eq!(h.arcsin().unwrap().to_radians(), 0.8_f64.asin());
+    /// ```
+    pub fn arcsin(&self) -> Result<Angle, DomainError> {
+        if self.inner < -1.0 || self.inner > 1.0 {
+            return Err(DomainError);
+        }
+        Ok(Angle::from_radians(self.inner.asin()))
+    }
+
+    /// Arccosine.
+    ///
+    /// Inputs to arccos must be between negative one and one; its
+    /// range extends from [0, pi].
+    /// 
+    /// ```
+    /// # use hebrides::Real;
+    /// let h = Real::new(3.0 / 5.0);
+    /// assert_eq!(h.arccos().unwrap().to_radians(), 0.6_f64.acos());
+    /// ```
+    pub fn arccos(&self) -> Result<Angle, DomainError> {
+        if self.inner < -1.0 || self.inner > 1.0 {
+            return Err(DomainError);
+        }
+        Ok(Angle::from_radians(self.inner.acos()))
+    }
+
+    /// Arctangent.
+    ///
+    /// The range of arctan extends between [-pi/2, pi/2].
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let h = Real::ONE;
+    /// assert_eq!(h.arctan().to_radians(), 1.0_f64.atan());
+    /// ```
+    pub fn arctan(&self) -> Angle {
+        Angle::from_radians(self.inner.atan())
+    }
+
+    /// Hyperbolic sine.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(2.0);
+    /// assert_eq!(x.sinh(), Real::new(2.0_f64.sinh()));
+    /// ```
+    pub fn sinh(&self) -> Self {
+        Real::new(self.inner.sinh())
+    }
+
+    /// Hyperbolic cosine.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(3.0);
+    /// assert_eq!(x.cosh(), Real::new(3.0_f64.cosh()));
+    /// ```
+    pub fn cosh(&self) -> Self {
+        Real::new(self.inner.cosh())
+    }
+
+    /// Hyperbolic tangent.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(4.0);
+    /// assert_eq!(x.tanh(), Real::new(4.0_f64.tanh()));
+    /// ```
+    pub fn tanh(&self) -> Self {
+        Real::new(self.inner.tanh())
+    }
+
+    /// Hyperbolic arcsine.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(3.0);
+    /// assert_eq!(x.arcsinh().to_radians(), 3.0_f64.asinh());
+    /// ```
+    pub fn arcsinh(&self) -> Angle {
+        Angle::from_radians(self.inner.asinh())
+    }
+
+    /// Hyperbolic arccosine.
+    /// 
+    /// Inputs to arccosh must be between [1, infinity].
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(2.0);
+    /// assert_eq!(x.arccosh().unwrap().to_radians(), 2.0_f64.acosh());
+    /// ```
+    pub fn arccosh(&self) -> Result<Angle, DomainError> {
+        if self.inner < 1.0 {
+            return Err(DomainError);
+        }
+        Ok(Angle::from_radians(self.inner.acosh()))
+    }
+
+    /// Hyperbolic arctangent.
+    ///
+    /// Inputs to arctanh must be between [-1, 1]. 
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(0.5);
+    /// assert_eq!(x.arctanh().unwrap().to_radians(), 0.5_f64.atanh());
+    /// ```
+    pub fn arctanh(&self) -> Result<Angle, DomainError> {
+        if self.inner <= -1.0 || self.inner >= 1.0 {
+            return Err(DomainError);
+        }
+        Ok(Angle::from_radians(self.inner.atanh()))
+    }
+
+    /// e to the power of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::ZERO;
+    /// assert_eq!(x.exp(), Real::ONE);
+    /// let y = Real::ONE;
+    /// assert_eq!(Real::ONE.exp(), Real::new(std::f64::consts::E));
+    /// ```
+    pub fn exp(&self) -> Self {
+        Real::new(self.inner.exp())
+    }
+
+    /// `self` to the power of `power`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(2.0);
+    /// assert_eq!(x, x.pow(Real::ONE));
+    /// assert_eq!(x*x, x.pow(Real::new(2.0)));
+    /// ```
+    pub fn pow(&self, power: Self) -> Self {
+        Real::new(self.inner.powf(power.inner))
+    }
+
+    /// `self` to the power of `power`.
+    /// 
+    /// Only accepts non-negative arguments; imaginary values
+    /// are not included in the output of powf.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(2.0);
+    /// assert_eq!(x, x.powf(1.0).unwrap());
+    /// assert_eq!(x*x, x.powf(2.0).unwrap());
+    /// ```
+    pub fn powf(&self, power: f64) -> Result<Self, DomainError> {
+        if self.negative() {
+            return Err(DomainError);
+        }
+        Ok(Real::new(self.inner.powf(power)))
+    }
+
+    /// `self` to the power of `power`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(2.0);
+    /// assert_eq!(x, x.powi(1));
+    /// assert_eq!(x*x, x.powi(2));
+    /// ```
+    pub fn powi(&self, power: i64) -> Self {
+        Real::new(self.inner.powf(power as f64))
+    }
+
+    /// Returns the square of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(2.0);
+    /// assert_eq!(x, Real::new(4.0));
+    /// let y = Real::new(-2.0);
+    /// assert_eq!(y, Real::new(4.0));
+    /// ```
     pub fn squared(&self) -> Self {
         self.powi(2)
     }
 
-    pub fn powf(&self, n: f64) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).powf(n)),
-            Num::U8(value) => Num::F64((*value as f64).powf(n)),
-            Num::U16(value) => Num::F64((*value as f64).powf(n)),
-            Num::U32(value) => Num::F64((*value as f64).powf(n)),
-            Num::U64(value) => Num::F64((*value as f64).powf(n)),
-            Num::I8(value) => Num::F64((*value as f64).powf(n)),
-            Num::I16(value) => Num::F64((*value as f64).powf(n)),
-            Num::I32(value) => Num::F64((*value as f64).powf(n)),
-            Num::I64(value) => Num::F64((*value as f64).powf(n)),
-            Num::F32(value) => Num::F64((*value as f64).powf(n)),
-            Num::F64(value) => Num::F64((*value).powf(n)),
-        }
-    }
-
-    pub fn sqrt(&self) -> Self {
+    /// Returns the square root of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(4.0);
+    /// assert_eq!(x.sqrt().unwrap(), Real::new(2.0));
+    /// ```
+    pub fn sqrt(&self) -> Result<Self, DomainError> {
         self.powf(0.5)
     }
 
-    pub fn exp(&self) -> Self {
-        let e = 1.0_f64.exp();
-        match self {
-            Num::USIZE(value) => Num::F64(e.powf(*value as f64)),
-            Num::U8(value) => Num::F64(e.powf(*value as f64)),
-            Num::U16(value) => Num::F64(e.powf(*value as f64)),
-            Num::U32(value) => Num::F64(e.powf(*value as f64)),
-            Num::U64(value) => Num::F64(e.powf(*value as f64)),
-            Num::I8(value) => Num::F64(e.powf(*value as f64)),
-            Num::I16(value) => Num::F64(e.powf(*value as f64)),
-            Num::I32(value) => Num::F64(e.powf(*value as f64)),
-            Num::I64(value) => Num::F64(e.powf(*value as f64)),
-            Num::F32(value) => Num::F64(e.powf(*value as f64)),
-            Num::F64(value) => Num::F64(e.powf(*value)),
+    /// Natural logarithm.
+    ///
+    /// Inputs to ln must be greater than zero.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let e = Real::new(std::f64::consts::E);
+    /// assert_eq!(e.ln().unwrap(), Real::ONE);
+    /// let x = Real::ONE;
+    /// assert_eq!(x.ln().unwrap(), Real::new(1.0_f64.ln()));
+    /// ```
+    pub fn ln(&self) -> Result<Self, DomainError> {
+        if self.inner <= 0.0 {
+            return Err(DomainError);
         }
+        Ok(Real::new(self.inner.ln()))
     }
 
-    pub fn log(&self, base: f64) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).log(base)),
-            Num::U8(value) => Num::F64((*value as f64).log(base)),
-            Num::U16(value) => Num::F64((*value as f64).log(base)),
-            Num::U32(value) => Num::F64((*value as f64).log(base)),
-            Num::U64(value) => Num::F64((*value as f64).log(base)),
-            Num::I8(value) => Num::F64((*value as f64).log(base)),
-            Num::I16(value) => Num::F64((*value as f64).log(base)),
-            Num::I32(value) => Num::F64((*value as f64).log(base)),
-            Num::I64(value) => Num::F64((*value as f64).log(base)),
-            Num::F32(value) => Num::F64((*value as f64).log(base)),
-            Num::F64(value) => Num::F64((*value).log(base)),
+    /// Logarithm with base 'base'.
+    /// 
+    /// Inputs for `base` must be greater than zero, and as for
+    /// all logarithms, `self` must also be greater than zero.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(5.0);
+    /// assert_eq!(x.log(Real::new(5.0)).unwrap(), Real::ONE);
+    /// ```
+    pub fn log(&self, base: Real) -> Result<Self, DomainError> {
+        if self.inner <= 0.0 || base.inner <= 0.0 {
+            return Err(DomainError);
         }
+        Ok(Real::new(self.inner.log(base.inner)))
     }
 
-    pub fn ln(&self) -> Self {
-        let e = 1.0_f64.exp();
-        self.log(e)
-    }
-
-    pub fn log10(&self) -> Self {
-        self.log(10.0)
-    }
-
-    pub fn sin(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).sin()),
-            Num::U8(value) => Num::F64((*value as f64).sin()),
-            Num::U16(value) => Num::F64((*value as f64).sin()),
-            Num::U32(value) => Num::F64((*value as f64).sin()),
-            Num::U64(value) => Num::F64((*value as f64).sin()),
-            Num::I8(value) => Num::F64((*value as f64).sin()),
-            Num::I16(value) => Num::F64((*value as f64).sin()),
-            Num::I32(value) => Num::F64((*value as f64).sin()),
-            Num::I64(value) => Num::F64((*value as f64).sin()),
-            Num::F32(value) => Num::F64((*value as f64).sin()),
-            Num::F64(value) => Num::F64((*value).sin()),
+    /// Logarithm with base 'base'.
+    /// 
+    /// Inputs for `base` must be greater than zero, and as for
+    /// all logarithms, `self` must also be greater than zero.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(5.0);
+    /// assert_eq!(x.logf(5.0).unwrap(), Real::ONE);
+    /// ```
+    pub fn logf(&self, base: f64) -> Result<Self, DomainError> {
+        if self.inner <= 0.0 || base <= 0.0 {
+            return Err(DomainError);
         }
+        Ok(Real::new(self.inner.log(base)))
     }
 
-    pub fn cos(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).cos()),
-            Num::U8(value) => Num::F64((*value as f64).cos()),
-            Num::U16(value) => Num::F64((*value as f64).cos()),
-            Num::U32(value) => Num::F64((*value as f64).cos()),
-            Num::U64(value) => Num::F64((*value as f64).cos()),
-            Num::I8(value) => Num::F64((*value as f64).cos()),
-            Num::I16(value) => Num::F64((*value as f64).cos()),
-            Num::I32(value) => Num::F64((*value as f64).cos()),
-            Num::I64(value) => Num::F64((*value as f64).cos()),
-            Num::F32(value) => Num::F64((*value as f64).cos()),
-            Num::F64(value) => Num::F64((*value).cos()),
+    /// Logarithm with base 'base'.
+    /// 
+    /// Inputs for `base` must be greater than zero, and as for
+    /// all logarithms, `self` must also be greater than zero.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let x = Real::new(5.0);
+    /// assert_eq!(x.logi(5).unwrap(), Real::ONE);
+    /// ```
+    pub fn logi(&self, base: i64) -> Result<Self, DomainError> {
+        if self.inner <= 0.0 || base <= 0 {
+            return Err(DomainError);
         }
+        Ok(Real::new(self.inner.log(base as f64)))
     }
 
-    pub fn tan(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).tan()),
-            Num::U8(value) => Num::F64((*value as f64).tan()),
-            Num::U16(value) => Num::F64((*value as f64).tan()),
-            Num::U32(value) => Num::F64((*value as f64).tan()),
-            Num::U64(value) => Num::F64((*value as f64).tan()),
-            Num::I8(value) => Num::F64((*value as f64).tan()),
-            Num::I16(value) => Num::F64((*value as f64).tan()),
-            Num::I32(value) => Num::F64((*value as f64).tan()),
-            Num::I64(value) => Num::F64((*value as f64).tan()),
-            Num::F32(value) => Num::F64((*value as f64).tan()),
-            Num::F64(value) => Num::F64((*value).tan()),
-        }
-    }
-
-    pub fn arcsin(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).asin()),
-            Num::U8(value) => Num::F64((*value as f64).asin()),
-            Num::U16(value) => Num::F64((*value as f64).asin()),
-            Num::U32(value) => Num::F64((*value as f64).asin()),
-            Num::U64(value) => Num::F64((*value as f64).asin()),
-            Num::I8(value) => Num::F64((*value as f64).asin()),
-            Num::I16(value) => Num::F64((*value as f64).asin()),
-            Num::I32(value) => Num::F64((*value as f64).asin()),
-            Num::I64(value) => Num::F64((*value as f64).asin()),
-            Num::F32(value) => Num::F64((*value as f64).asin()),
-            Num::F64(value) => Num::F64((*value).asin()),
-        }
-    }
-
-    pub fn arccos(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).acos()),
-            Num::U8(value) => Num::F64((*value as f64).acos()),
-            Num::U16(value) => Num::F64((*value as f64).acos()),
-            Num::U32(value) => Num::F64((*value as f64).acos()),
-            Num::U64(value) => Num::F64((*value as f64).acos()),
-            Num::I8(value) => Num::F64((*value as f64).acos()),
-            Num::I16(value) => Num::F64((*value as f64).acos()),
-            Num::I32(value) => Num::F64((*value as f64).acos()),
-            Num::I64(value) => Num::F64((*value as f64).acos()),
-            Num::F32(value) => Num::F64((*value as f64).acos()),
-            Num::F64(value) => Num::F64((*value).acos()),
-        }
-    }
-
-    pub fn arctan(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).atan()),
-            Num::U8(value) => Num::F64((*value as f64).atan()),
-            Num::U16(value) => Num::F64((*value as f64).atan()),
-            Num::U32(value) => Num::F64((*value as f64).atan()),
-            Num::U64(value) => Num::F64((*value as f64).atan()),
-            Num::I8(value) => Num::F64((*value as f64).atan()),
-            Num::I16(value) => Num::F64((*value as f64).atan()),
-            Num::I32(value) => Num::F64((*value as f64).atan()),
-            Num::I64(value) => Num::F64((*value as f64).atan()),
-            Num::F32(value) => Num::F64((*value as f64).atan()),
-            Num::F64(value) => Num::F64((*value).atan()),
-        }
-    }
-
-    pub fn arctan2(_x: Self, _y: Self) -> Self {
-        unimplemented!()
-    }
-
-    pub fn sinh(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).sinh()),
-            Num::U8(value) => Num::F64((*value as f64).sinh()),
-            Num::U16(value) => Num::F64((*value as f64).sinh()),
-            Num::U32(value) => Num::F64((*value as f64).sinh()),
-            Num::U64(value) => Num::F64((*value as f64).sinh()),
-            Num::I8(value) => Num::F64((*value as f64).sinh()),
-            Num::I16(value) => Num::F64((*value as f64).sinh()),
-            Num::I32(value) => Num::F64((*value as f64).sinh()),
-            Num::I64(value) => Num::F64((*value as f64).sinh()),
-            Num::F32(value) => Num::F64((*value as f64).sinh()),
-            Num::F64(value) => Num::F64((*value).sinh()),
-        }
-    }
-
-    pub fn cosh(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).cosh()),
-            Num::U8(value) => Num::F64((*value as f64).cosh()),
-            Num::U16(value) => Num::F64((*value as f64).cosh()),
-            Num::U32(value) => Num::F64((*value as f64).cosh()),
-            Num::U64(value) => Num::F64((*value as f64).cosh()),
-            Num::I8(value) => Num::F64((*value as f64).cosh()),
-            Num::I16(value) => Num::F64((*value as f64).cosh()),
-            Num::I32(value) => Num::F64((*value as f64).cosh()),
-            Num::I64(value) => Num::F64((*value as f64).cosh()),
-            Num::F32(value) => Num::F64((*value as f64).cosh()),
-            Num::F64(value) => Num::F64((*value).cosh()),
-        }
-    }
-
-    pub fn tanh(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).tanh()),
-            Num::U8(value) => Num::F64((*value as f64).tanh()),
-            Num::U16(value) => Num::F64((*value as f64).tanh()),
-            Num::U32(value) => Num::F64((*value as f64).tanh()),
-            Num::U64(value) => Num::F64((*value as f64).tanh()),
-            Num::I8(value) => Num::F64((*value as f64).tanh()),
-            Num::I16(value) => Num::F64((*value as f64).tanh()),
-            Num::I32(value) => Num::F64((*value as f64).tanh()),
-            Num::I64(value) => Num::F64((*value as f64).tanh()),
-            Num::F32(value) => Num::F64((*value as f64).tanh()),
-            Num::F64(value) => Num::F64((*value).tanh()),
-        }
-    }
-
-    pub fn arcsinh(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).asinh()),
-            Num::U8(value) => Num::F64((*value as f64).asinh()),
-            Num::U16(value) => Num::F64((*value as f64).asinh()),
-            Num::U32(value) => Num::F64((*value as f64).asinh()),
-            Num::U64(value) => Num::F64((*value as f64).asinh()),
-            Num::I8(value) => Num::F64((*value as f64).asinh()),
-            Num::I16(value) => Num::F64((*value as f64).asinh()),
-            Num::I32(value) => Num::F64((*value as f64).asinh()),
-            Num::I64(value) => Num::F64((*value as f64).asinh()),
-            Num::F32(value) => Num::F64((*value as f64).asinh()),
-            Num::F64(value) => Num::F64((*value).asinh()),
-        }
-    }
-
-    pub fn arccosh(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).acosh()),
-            Num::U8(value) => Num::F64((*value as f64).acosh()),
-            Num::U16(value) => Num::F64((*value as f64).acosh()),
-            Num::U32(value) => Num::F64((*value as f64).acosh()),
-            Num::U64(value) => Num::F64((*value as f64).acosh()),
-            Num::I8(value) => Num::F64((*value as f64).acosh()),
-            Num::I16(value) => Num::F64((*value as f64).acosh()),
-            Num::I32(value) => Num::F64((*value as f64).acosh()),
-            Num::I64(value) => Num::F64((*value as f64).acosh()),
-            Num::F32(value) => Num::F64((*value as f64).acosh()),
-            Num::F64(value) => Num::F64((*value).acosh()),
-        }
-    }
-
-    pub fn arctanh(&self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::F64((*value as f64).atanh()),
-            Num::U8(value) => Num::F64((*value as f64).atanh()),
-            Num::U16(value) => Num::F64((*value as f64).atanh()),
-            Num::U32(value) => Num::F64((*value as f64).atanh()),
-            Num::U64(value) => Num::F64((*value as f64).atanh()),
-            Num::I8(value) => Num::F64((*value as f64).atanh()),
-            Num::I16(value) => Num::F64((*value as f64).atanh()),
-            Num::I32(value) => Num::F64((*value as f64).atanh()),
-            Num::I64(value) => Num::F64((*value as f64).atanh()),
-            Num::F32(value) => Num::F64((*value as f64).atanh()),
-            Num::F64(value) => Num::F64((*value).atanh()),
-        }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        *self == Num::zero()
-    }
-
-    pub fn positive(&self) -> bool {
-        match self {
-            Num::USIZE(value) => *value != 0_usize,
-            Num::U8(value) => *value != 0_u8,
-            Num::U16(value) => *value != 0_u16,
-            Num::U32(value) => *value != 0_u32,
-            Num::U64(value) => *value != 0_u64,
-            Num::I8(value) => is_positive![*value, i8],
-            Num::I16(value) => is_positive![*value, i16],
-            Num::I32(value) => is_positive![*value, i32],
-            Num::I64(value) => is_positive![*value, i64],
-            Num::F32(value) => is_positive![*value, f32],
-            Num::F64(value) => is_positive![*value, f64],
-        }
-    }
-
-    pub fn negative(&self) -> bool {
-        if self.is_zero() {
-            return false;
-        }
-        !self.positive()
-    }
 }
-
-impl std::fmt::Display for Num {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Num::USIZE(value) => write!(f, "{}", value),
-            Num::U8(value) => write!(f, "{}", value),
-            Num::U16(value) => write!(f, "{}", value),
-            Num::U32(value) => write!(f, "{}", value),
-            Num::U64(value) => write!(f, "{}", value),
-            Num::I8(value) => write!(f, "{}", value),
-            Num::I16(value) => write!(f, "{}", value),
-            Num::I32(value) => write!(f, "{}", value),
-            Num::I64(value) => write!(f, "{}", value),
-            Num::F32(value) => write!(f, "{}", value),
-            Num::F64(value) => write!(f, "{}", value),
-        }
-    }
-}
-
-macro_rules! impl_num_from_primitive {
-    ($primitive:ty, $variant:expr) => {
-        impl From<$primitive> for Num {
-            fn from(value: $primitive) -> Self {
-                $variant(value)
-            }
-        }
-    };
-}
-
-impl_num_from_primitive![usize, Num::USIZE];
-
-impl_num_from_primitive![u8, Num::U8];
-impl_num_from_primitive![u16, Num::U16];
-impl_num_from_primitive![u32, Num::U32];
-impl_num_from_primitive![u64, Num::U64];
-
-impl_num_from_primitive![i8, Num::I8];
-impl_num_from_primitive![i16, Num::I16];
-impl_num_from_primitive![i32, Num::I32];
-impl_num_from_primitive![i64, Num::I64];
-
-impl_num_from_primitive![f32, Num::F32];
-impl_num_from_primitive![f64, Num::F64];
-
-macro_rules! assert_almost_equal {
-    ($a:expr, $b:expr, $t:ty) => {{
-        if $a as $t == $b as $t {
-            return true;
-        }
-        if ($a as $t - $b as $t).abs() < <$t>::EPSILON {
-            return true;
-        }
-        false
-    }};
-}
-
-impl PartialEq for Num {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            Num::USIZE(self_value) => match other {
-                Num::USIZE(other_value) => *self_value == *other_value,
-                Num::U8(other_value) => *self_value == *other_value as usize,
-                Num::U16(other_value) => *self_value == *other_value as usize,
-                Num::U32(other_value) => *self_value == *other_value as usize,
-                Num::U64(other_value) => *self_value == *other_value as usize,
-                Num::I8(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I16(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I32(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::U8(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as usize == *other_value,
-                Num::U8(other_value) => *self_value == *other_value,
-                Num::U16(other_value) => *self_value as u16 == *other_value,
-                Num::U32(other_value) => *self_value as u32 == *other_value,
-                Num::U64(other_value) => *self_value as u64 == *other_value,
-                Num::I8(other_value) => *self_value as i8 == *other_value,
-                Num::I16(other_value) => *self_value as i16 == *other_value,
-                Num::I32(other_value) => *self_value as i32 == *other_value,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::U16(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as usize == *other_value,
-                Num::U8(other_value) => *self_value == *other_value as u16,
-                Num::U16(other_value) => *self_value == *other_value,
-                Num::U32(other_value) => *self_value as u32 == *other_value,
-                Num::U64(other_value) => *self_value as u64 == *other_value,
-                Num::I8(other_value) => *self_value as i16 == *other_value as i16,
-                Num::I16(other_value) => *self_value as i16 == *other_value,
-                Num::I32(other_value) => *self_value as i32 == *other_value,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::U32(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as usize == *other_value,
-                Num::U8(other_value) => *self_value == *other_value as u32,
-                Num::U16(other_value) => *self_value == *other_value as u32,
-                Num::U32(other_value) => *self_value == *other_value,
-                Num::U64(other_value) => *self_value as u64 == *other_value,
-                Num::I8(other_value) => *self_value as i32 == *other_value as i32,
-                Num::I16(other_value) => *self_value as i32 == *other_value as i32,
-                Num::I32(other_value) => *self_value as i32 == *other_value,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::U64(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as usize == *other_value,
-                Num::U8(other_value) => *self_value == *other_value as u64,
-                Num::U16(other_value) => *self_value == *other_value as u64,
-                Num::U32(other_value) => *self_value == *other_value as u64,
-                Num::U64(other_value) => *self_value == *other_value,
-                Num::I8(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I16(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I32(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::I8(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as i64 == *other_value as i64,
-                Num::U8(other_value) => *self_value == *other_value as i8,
-                Num::U16(other_value) => *self_value as i16 == *other_value as i16,
-                Num::U32(other_value) => *self_value as i32 == *other_value as i32,
-                Num::U64(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I8(other_value) => *self_value == *other_value,
-                Num::I16(other_value) => *self_value as i16 == *other_value,
-                Num::I32(other_value) => *self_value as i32 == *other_value,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::I16(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as i64 == *other_value as i64,
-                Num::U8(other_value) => *self_value == *other_value as i16,
-                Num::U16(other_value) => *self_value == *other_value as i16,
-                Num::U32(other_value) => *self_value as i32 == *other_value as i32,
-                Num::U64(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I8(other_value) => *self_value == *other_value as i16,
-                Num::I16(other_value) => *self_value == *other_value,
-                Num::I32(other_value) => *self_value as i32 == *other_value,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::I32(self_value) => match other {
-                Num::USIZE(other_value) => *self_value as i64 == *other_value as i64,
-                Num::U8(other_value) => *self_value == *other_value as i32,
-                Num::U16(other_value) => *self_value == *other_value as i32,
-                Num::U32(other_value) => *self_value == *other_value as i32,
-                Num::U64(other_value) => *self_value as i64 == *other_value as i64,
-                Num::I8(other_value) => *self_value == *other_value as i32,
-                Num::I16(other_value) => *self_value == *other_value as i32,
-                Num::I32(other_value) => *self_value == *other_value,
-                Num::I64(other_value) => *self_value as i64 == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::I64(self_value) => match other {
-                Num::USIZE(other_value) => *self_value == *other_value as i64,
-                Num::U8(other_value) => *self_value == *other_value as i64,
-                Num::U16(other_value) => *self_value == *other_value as i64,
-                Num::U32(other_value) => *self_value == *other_value as i64,
-                Num::U64(other_value) => *self_value == *other_value as i64,
-                Num::I8(other_value) => *self_value == *other_value as i64,
-                Num::I16(other_value) => *self_value == *other_value as i64,
-                Num::I32(other_value) => *self_value == *other_value as i64,
-                Num::I64(other_value) => *self_value == *other_value,
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::F32(self_value) => match other {
-                Num::USIZE(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::U8(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::U16(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::U32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::U64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::I8(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::I16(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::I32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::I64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f32],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-            Num::F64(self_value) => match other {
-                Num::USIZE(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::U8(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::U16(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::U32(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::U64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::I8(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::I16(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::I32(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::I64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::F32(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-                Num::F64(other_value) => assert_almost_equal![*self_value, *other_value, f64],
-            },
-        }
-    }
-}
-
-impl Eq for Num {}
-
-impl Add<Self> for Num {
-    type Output = Self;
-    fn add(self, other: Self) -> Self {
-        match self {
-            Num::USIZE(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U8(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U16(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U32(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 + other_value),
-                Num::I8(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::U8(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U8(other_value) => Num::U16(self_value as u16 + other_value as u16),
-                Num::U16(other_value) => Num::U32(self_value as u32 + other_value as u32),
-                Num::U32(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 + other_value),
-                Num::I8(other_value) => Num::I16(self_value as i16 + other_value as i16),
-                Num::I16(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::U16(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U8(other_value) => Num::U32(self_value as u32 + other_value as u32),
-                Num::U16(other_value) => Num::U32(self_value as u32 + other_value as u32),
-                Num::U32(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 + other_value),
-                Num::I8(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::I16(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::U32(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U8(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U16(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U32(other_value) => Num::U64(self_value as u64 + other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 + other_value),
-                Num::I8(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::U64(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value + other_value as u64),
-                Num::U8(other_value) => Num::U64(self_value + other_value as u64),
-                Num::U16(other_value) => Num::U64(self_value + other_value as u64),
-                Num::U32(other_value) => Num::U64(self_value + other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value + other_value),
-                Num::I8(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::I8(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U8(other_value) => Num::I16(self_value as i16 + other_value as i16),
-                Num::U16(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::U32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I8(other_value) => Num::I16(self_value as i16 + other_value as i16),
-                Num::I16(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::I16(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U8(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::U16(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::U32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I8(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::I16(other_value) => Num::I32(self_value as i32 + other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::I32(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::I64(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value + other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value + other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value + other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value + other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value + other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value + other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value + other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value + other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value + other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::F32(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::U8(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::U16(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::U32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::U64(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::I8(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::I16(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::I32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::I64(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F32(other_value) => Num::F64(self_value as f64 + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 + other_value),
-            },
-            Num::F64(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value + other_value as f64),
-                Num::U8(other_value) => Num::F64(self_value + other_value as f64),
-                Num::U16(other_value) => Num::F64(self_value + other_value as f64),
-                Num::U32(other_value) => Num::F64(self_value + other_value as f64),
-                Num::U64(other_value) => Num::F64(self_value + other_value as f64),
-                Num::I8(other_value) => Num::F64(self_value + other_value as f64),
-                Num::I16(other_value) => Num::F64(self_value + other_value as f64),
-                Num::I32(other_value) => Num::F64(self_value + other_value as f64),
-                Num::I64(other_value) => Num::F64(self_value + other_value as f64),
-                Num::F32(other_value) => Num::F64(self_value + other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value + other_value),
-            },
-        }
-    }
-}
-
-impl Sub<Self> for Num {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        match self {
-            Num::USIZE(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 - other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::U8(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I8(self_value as i8 - other_value as i8),
-                Num::U16(other_value) => Num::I16(self_value as i16 - other_value as i16),
-                Num::U32(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I8(self_value as i8 - other_value),
-                Num::I16(other_value) => Num::I16(self_value as i16 - other_value),
-                Num::I32(other_value) => Num::I32(self_value as i32 - other_value),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F32(self_value as f32 - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::U16(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I16(self_value as i16 - other_value as i16),
-                Num::U16(other_value) => Num::I16(self_value as i16 - other_value as i16),
-                Num::U32(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I16(self_value as i16 - other_value as i16),
-                Num::I16(other_value) => Num::I16(self_value as i16 - other_value),
-                Num::I32(other_value) => Num::I32(self_value as i32 - other_value),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F32(self_value as f32 - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::U32(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U16(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U32(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::I16(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::I32(other_value) => Num::I32(self_value as i32 - other_value),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F32(self_value as f32 - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::U64(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 - other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::I8(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I8(self_value - other_value as i8),
-                Num::U16(other_value) => Num::I16(self_value as i16 - other_value as i16),
-                Num::U32(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I8(self_value - other_value),
-                Num::I16(other_value) => Num::I16(self_value as i16 - other_value),
-                Num::I32(other_value) => Num::I32(self_value as i32 - other_value),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F32(self_value as f32 - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::I16(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I16(self_value - other_value as i16),
-                Num::U16(other_value) => Num::I16(self_value - other_value as i16),
-                Num::U32(other_value) => Num::I32(self_value as i32 - other_value as i32),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I16(self_value - other_value as i16),
-                Num::I16(other_value) => Num::I16(self_value - other_value),
-                Num::I32(other_value) => Num::I32(self_value as i32 - other_value),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F32(self_value as f32 - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::I32(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::U8(other_value) => Num::I32(self_value - other_value as i32),
-                Num::U16(other_value) => Num::I32(self_value - other_value as i32),
-                Num::U32(other_value) => Num::I32(self_value - other_value as i32),
-                Num::U64(other_value) => Num::I64(self_value as i64 - other_value as i64),
-                Num::I8(other_value) => Num::I32(self_value - other_value as i32),
-                Num::I16(other_value) => Num::I32(self_value - other_value as i32),
-                Num::I32(other_value) => Num::I32(self_value - other_value),
-                Num::I64(other_value) => Num::I64(self_value as i64 - other_value),
-                Num::F32(other_value) => Num::F32(self_value as f32 - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::I64(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value - other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value - other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value - other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value - other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value - other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value - other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value - other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value - other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value - other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 - other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::F32(self_value) => match other {
-                Num::USIZE(other_value) => Num::F32(self_value - other_value as f32),
-                Num::U8(other_value) => Num::F32(self_value - other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value - other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value - other_value as f32),
-                Num::U64(other_value) => Num::F32(self_value - other_value as f32),
-                Num::I8(other_value) => Num::F32(self_value - other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value - other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value - other_value as f32),
-                Num::I64(other_value) => Num::F32(self_value - other_value as f32),
-                Num::F32(other_value) => Num::F32(self_value - other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 - other_value),
-            },
-            Num::F64(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value - other_value as f64),
-                Num::U8(other_value) => Num::F64(self_value - other_value as f64),
-                Num::U16(other_value) => Num::F64(self_value - other_value as f64),
-                Num::U32(other_value) => Num::F64(self_value - other_value as f64),
-                Num::U64(other_value) => Num::F64(self_value - other_value as f64),
-                Num::I8(other_value) => Num::F64(self_value - other_value as f64),
-                Num::I16(other_value) => Num::F64(self_value - other_value as f64),
-                Num::I32(other_value) => Num::F64(self_value - other_value as f64),
-                Num::I64(other_value) => Num::F64(self_value - other_value as f64),
-                Num::F32(other_value) => Num::F64(self_value - other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value - other_value),
-            },
-        }
-    }
-}
-
-impl Mul<Self> for Num {
-    type Output = Self;
-    fn mul(self, other: Self) -> Self {
-        match self {
-            Num::USIZE(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U8(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U16(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U32(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 * other_value),
-                Num::I8(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::U8(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U8(other_value) => Num::U16(self_value as u16 * other_value as u16),
-                Num::U16(other_value) => Num::U32(self_value as u32 * other_value as u32),
-                Num::U32(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 * other_value),
-                Num::I8(other_value) => Num::I16(self_value as i16 * other_value as i16),
-                Num::I16(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::U16(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U8(other_value) => Num::U32(self_value as u32 * other_value as u32),
-                Num::U16(other_value) => Num::U32(self_value as u32 * other_value as u32),
-                Num::U32(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 * other_value),
-                Num::I8(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::I16(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::U32(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U8(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U16(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U32(other_value) => Num::U64(self_value as u64 * other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value as u64 * other_value),
-                Num::I8(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::U64(self_value) => match other {
-                Num::USIZE(other_value) => Num::U64(self_value * other_value as u64),
-                Num::U8(other_value) => Num::U64(self_value * other_value as u64),
-                Num::U16(other_value) => Num::U64(self_value * other_value as u64),
-                Num::U32(other_value) => Num::U64(self_value * other_value as u64),
-                Num::U64(other_value) => Num::U64(self_value * other_value),
-                Num::I8(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::I8(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U8(other_value) => Num::I16(self_value as i16 * other_value as i16),
-                Num::U16(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::U32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I8(other_value) => Num::I16(self_value as i16 * other_value as i16),
-                Num::I16(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::I16(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U8(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::U16(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::U32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I8(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::I16(other_value) => Num::I32(self_value as i32 * other_value as i32),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::I32(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value as i64 * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value as i64 * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::I64(self_value) => match other {
-                Num::USIZE(other_value) => Num::I64(self_value * other_value as i64),
-                Num::U8(other_value) => Num::I64(self_value * other_value as i64),
-                Num::U16(other_value) => Num::I64(self_value * other_value as i64),
-                Num::U32(other_value) => Num::I64(self_value * other_value as i64),
-                Num::U64(other_value) => Num::I64(self_value * other_value as i64),
-                Num::I8(other_value) => Num::I64(self_value * other_value as i64),
-                Num::I16(other_value) => Num::I64(self_value * other_value as i64),
-                Num::I32(other_value) => Num::I64(self_value * other_value as i64),
-                Num::I64(other_value) => Num::I64(self_value * other_value),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::F32(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::U8(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::U16(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::U32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::U64(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::I8(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::I16(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::I32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::I64(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F32(other_value) => Num::F64(self_value as f64 * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value as f64 * other_value),
-            },
-            Num::F64(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value * other_value as f64),
-                Num::U8(other_value) => Num::F64(self_value * other_value as f64),
-                Num::U16(other_value) => Num::F64(self_value * other_value as f64),
-                Num::U32(other_value) => Num::F64(self_value * other_value as f64),
-                Num::U64(other_value) => Num::F64(self_value * other_value as f64),
-                Num::I8(other_value) => Num::F64(self_value * other_value as f64),
-                Num::I16(other_value) => Num::F64(self_value * other_value as f64),
-                Num::I32(other_value) => Num::F64(self_value * other_value as f64),
-                Num::I64(other_value) => Num::F64(self_value * other_value as f64),
-                Num::F32(other_value) => Num::F64(self_value * other_value as f64),
-                Num::F64(other_value) => Num::F64(self_value * other_value),
-            },
-        }
-    }
-}
-
-impl Div<Self> for Num {
-    type Output = Self;
-    fn div(self, other: Self) -> Self {
-        match self {
-            Num::USIZE(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::U8(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::U16(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::U32(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::U64(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::I8(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::I16(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::I32(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::I64(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::F32(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value as f64 / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value / other_value),
-                Num::F64(other_value) => Num::F64(self_value as f64 / other_value),
-            },
-            Num::F64(self_value) => match other {
-                Num::USIZE(other_value) => Num::F64(self_value / other_value as f64),
-                Num::U8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::U64(other_value) => Num::F64(self_value / other_value as f64),
-                Num::I8(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I16(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I32(other_value) => Num::F32(self_value as f32 / other_value as f32),
-                Num::I64(other_value) => Num::F64(self_value / other_value as f64),
-                Num::F32(other_value) => Num::F32(self_value as f32 / other_value),
-                Num::F64(other_value) => Num::F64(self_value / other_value),
-            },
-        }
-    }
-}
-
-impl Neg for Num {
-    type Output = Self;
-    fn neg(self) -> Self {
-        match self {
-            Num::USIZE(value) => Num::I64(-(value as i64)),
-            Num::U8(value) => Num::I8(-(value as i8)),
-            Num::U16(value) => Num::I16(-(value as i16)),
-            Num::U32(value) => Num::I32(-(value as i32)),
-            Num::U64(value) => Num::I64(-(value as i64)),
-            Num::I8(value) => Num::I8(-value),
-            Num::I16(value) => Num::I16(-value),
-            Num::I32(value) => Num::I32(-value),
-            Num::I64(value) => Num::I64(-value),
-            Num::F32(value) => Num::F32(-value),
-            Num::F64(value) => Num::F64(-value),
-        }
-    }
-}
-
-fn cmp_numeric<U: PartialOrd>(a: U, b: U) -> Option<std::cmp::Ordering> {
-    if a < b {
-        return Some(std::cmp::Ordering::Less);
-    }
-    if a > b {
-        return Some(std::cmp::Ordering::Greater);
-    }
-    if a == b {
-        return Some(std::cmp::Ordering::Equal);
-    }
-    None
-}
-
-impl PartialOrd for Num {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self {
-            Num::USIZE(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::U8(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::U16(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::U32(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::U64(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::I8(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::I16(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::I32(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value as i64, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value as i64, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::I64(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U8(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U16(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U32(other_value) => cmp_numeric(*self_value as u64, *other_value as u64),
-                Num::U64(other_value) => cmp_numeric(*self_value as u64, *other_value),
-                Num::I8(other_value) => cmp_numeric(*self_value, *other_value as i64),
-                Num::I16(other_value) => cmp_numeric(*self_value, *other_value as i64),
-                Num::I32(other_value) => cmp_numeric(*self_value, *other_value as i64),
-                Num::I64(other_value) => cmp_numeric(*self_value, *other_value),
-                Num::F32(other_value) => (*other_value).partial_cmp(&(*self_value as f32)),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::F32(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::U8(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::U16(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::U32(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::U64(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::I8(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::I16(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::I32(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::I64(other_value) => cmp_numeric(*self_value as f64, *other_value as f64),
-                Num::F32(other_value) => (*other_value).partial_cmp(self_value),
-                Num::F64(other_value) => (*other_value).partial_cmp(&(*self_value as f64)),
-            },
-            Num::F64(self_value) => match other {
-                Num::USIZE(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::U8(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::U16(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::U32(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::U64(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::I8(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::I16(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::I32(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::I64(other_value) => cmp_numeric(*self_value, *other_value as f64),
-                Num::F32(other_value) => (*other_value as f64).partial_cmp(self_value),
-                Num::F64(other_value) => (*other_value).partial_cmp(self_value),
-            },
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Real {
-    value: Num,
-}
-
-impl Real {
-    pub fn new(value: Num) -> Self {
-        Self { value }
-    }
-
-    pub fn zero() -> Self {
-        Real::new(Num::zero())
-    }
-
-    pub fn one() -> Self {
-        Real::new(Num::F64(1.0))
-    }
-
-    pub fn min_err() -> Self {
-        Real::from(f64::EPSILON)
-    }
-
-    pub fn abs(&self) -> Self {
-        Real::new(self.value.abs())
-    }
-
-    pub fn powi(&self, n: i32) -> Self {
-        Real::new(self.value.powi(n))
-    }
-
-    pub fn squared(&self) -> Self {
-        Real::new(self.value.squared())
-    }
-
-    pub fn powf(&self, n: f64) -> Self {
-        Real::new(self.value.powf(n))
-    }
-
-    pub fn sqrt(&self) -> Self {
-        Real::new(self.value.powf(0.5))
-    }
-
-    pub fn exp(&self) -> Self {
-        Real::new(self.value.exp())
-    }
-
-    pub fn neg_exp(&self) -> Self {
-        Real::new(self.value.powf(-std::f64::consts::E))
-    }
-
-    pub fn log(&self, base: f64) -> Self {
-        if base == 0.0 {
-            return Real::new(Num::U8(1));
-        }
-        if base < 0.0 {
-            unimplemented!()
-        }
-        Real::new(self.value.log(base))
-    }
-
-    pub fn log10(&self) -> Self {
-        self.log(10.0)
-    }
-
-    pub fn log2(&self) -> Self {
-        self.log(2.0)
-    }
-
-    pub fn ln(&self) -> Self {
-        self.log(1.0_f64.exp())
-    }
-
-    pub fn sin(&self) -> Self {
-        Real::new(self.value.sin())
-    }
-
-    pub fn cos(&self) -> Self {
-        Real::new(self.value.cos())
-    }
-
-    pub fn tan(&self) -> Self {
-        Real::new(self.value.tan())
-    }
-
-    pub fn arcsin(&self) -> Self {
-        Real::new(self.value.arcsin())
-    }
-
-    pub fn arccos(&self) -> Self {
-        Real::new(self.value.arccos())
-    }
-
-    pub fn arctan(&self) -> Self {
-        Real::new(self.value.arctan())
-    }
-
-    pub fn sinh(&self) -> Self {
-        Real::new(self.value.sinh())
-    }
-
-    pub fn cosh(&self) -> Self {
-        Real::new(self.value.cosh())
-    }
-
-    pub fn tanh(&self) -> Self {
-        Real::new(self.value.tanh())
-    }
-
-    pub fn arcsinh(&self) -> Self {
-        Real::new(self.value.arcsinh())
-    }
-
-    pub fn arccosh(&self) -> Self {
-        Real::new(self.value.arccosh())
-    }
-
-    pub fn arctanh(&self) -> Self {
-        Real::new(self.value.arccosh())
-    }
-
-    pub fn arctan2(_x: Real, _y: Real) -> Self {
-        unimplemented!()
-    }
-
-    pub fn is_zero(&self) -> bool {
-        *self == Real::zero()
-    }
-
-    pub fn positive(&self) -> bool {
-        self.value.positive()
-    }
-
-    pub fn negative(&self) -> bool {
-        self.value.negative()
-    }
-}
-
-impl std::fmt::Display for Real {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-macro_rules! impl_real_from_primitive {
-    ($primitive:ty, $num_variant:expr) => {
-        impl From<$primitive> for Real {
-            fn from(other: $primitive) -> Self {
-                Real::new($num_variant(other))
-            }
-        }
-    };
-}
-
-impl_real_from_primitive![u8, Num::U8];
-impl_real_from_primitive![u16, Num::U16];
-impl_real_from_primitive![u32, Num::U32];
-impl_real_from_primitive![u64, Num::U64];
-impl_real_from_primitive![i8, Num::I8];
-impl_real_from_primitive![i16, Num::I16];
-impl_real_from_primitive![i32, Num::I32];
-impl_real_from_primitive![i64, Num::I64];
-impl_real_from_primitive![f32, Num::F32];
-impl_real_from_primitive![f64, Num::F64];
 
 impl PartialEq for Real {
     fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
+        approx_eq![self.inner, other.inner]
     }
 }
 
 impl Eq for Real {}
 
-impl PartialOrd for Real {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.value.partial_cmp(&other.value)
-    }
-}
-
-impl Ord for Real {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.value.partial_cmp(&other.value) {
-            Some(ordering) => ordering,
-            None => panic!("Item in comparison is not a real number."),
-        }
-    }
-}
-
 impl Add<Self> for Real {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        Real::new(self.value + other.value)
+        Real::new(self.inner + other.inner)
     }
 }
 
 impl Sub<Self> for Real {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
-        Real::new(self.value - other.value)
+        Real::new(self.inner - other.inner)
     }
 }
 
 impl Mul<Self> for Real {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
-        Real::new(self.value * other.value)
+        Real::new(self.inner * other.inner)
     }
 }
 
 impl Div<Self> for Real {
     type Output = Self;
     fn div(self, other: Self) -> Self {
-        Real::new(self.value / other.value)
+        Real::new(self.inner / other.inner)
     }
 }
 
 impl Neg for Real {
     type Output = Self;
     fn neg(self) -> Self {
-        Real::new(-(self.value))
+        Real::new(-self.inner)
     }
 }
 
-pub enum DegreesType {
-    Degrees,
-    Radians,
-}
-
-impl DegreesType {
-    pub fn to_degrees(value: f64) -> f64 {
-        value * 180.0_f64 / std::f64::consts::PI
-    }
-
-    pub fn to_radians(value: f64) -> f64 {
-        value * std::f64::consts::PI / 180.0_f64
+macro_rules! impl_real_from_primitive {
+    ($t:ty) => {
+        impl From<$t> for Real {
+            fn from(value: $t) -> Self {
+                Real::new(value as f64)
+            }
+        }
     }
 }
 
+impl_real_from_primitive![u8];
+impl_real_from_primitive![u16];
+impl_real_from_primitive![u32];
+impl_real_from_primitive![u64];
+
+impl_real_from_primitive![i8];
+impl_real_from_primitive![i16];
+impl_real_from_primitive![i32];
+impl_real_from_primitive![i64];
+
+impl_real_from_primitive![f32];
+impl_real_from_primitive![f64];
+
+/// Representation of complex numbers
 #[derive(Copy, Clone, Debug)]
 pub struct Complex {
-    real: Num,
-    imag: Num,
+    real: Real,
+    imag: Real
 }
 
 impl Complex {
-    pub fn new(real: Num, imag: Num) -> Self {
-        Self { real, imag }
-    }
 
-    pub fn from_real(value: Num) -> Self {
-        Complex::new(value, Num::zero())
-    }
+    /// shortcut for encoding 0.0 as Complex::new(Real::ZERO, Real::ZERO)
+    pub const ZERO: Complex = Complex { real: Real::ZERO, imag: Real::ZERO };
 
-    pub fn from_imag(value: Num) -> Self {
-        Complex::new(Num::zero(), value)
-    }
+    /// shortcut for encoding 1.0 as Complex::new(Real::ONE, Real::ZERO)
+    pub const ONE: Complex = Complex { real: Real::ONE, imag: Real::ZERO };
 
-    fn azimuthal_in_degrees(z: &Complex) -> Complex {
-        if z.real.is_zero() {
-            if z.imag > Num::zero() {
-                return Complex::from_real(Num::F64(90.0));
-            }
-            return Complex::from_real(Num::F64(270.0));
-        }
-        if z.imag.is_zero() {
-            if z.real > Num::zero() {
-                return Complex::from_real(Num::zero());
-            }
-            return Complex::from_real(Num::F64(180.0));
-        }
-        if z.imag > Num::zero() {
-            return Complex::to_degrees(&Complex::from_real((z.real / z.abs().real).arccos()));
-        }
-        if z.imag < Num::zero() {
-            return Complex::to_degrees(&Complex::from_real(
-                (z.real / z.abs().real).arccos() + Num::F64(std::f64::consts::PI),
-            ));
-        }
-        Complex::from_real(Num::zero())
-    }
+    /// shortcut for encoding the imaginary unit as Complex::new(Real::ZERO, Real::ONE)
+    pub const I: Complex = Complex { real: Real::ZERO, imag: Real::ONE };
 
-    fn azimuthal_in_radians(z: &Complex) -> Complex {
-        if z.real.is_zero() {
-            if z.imag > Num::zero() {
-                return Complex::from_real(Num::F64(std::f64::consts::FRAC_PI_2));
-            }
-            return Complex::from_real(Num::F64(3.0 * std::f64::consts::FRAC_PI_2));
-        }
-        if z.imag.is_zero() {
-            if z.real > Num::zero() {
-                return Complex::from_real(Num::zero());
-            }
-            return Complex::from_real(Num::F64(std::f64::consts::PI));
-        }
-        if z.imag > Num::zero() {
-            return Complex::from_real((z.real / z.abs().real).arccos());
-        }
-        if z.imag < Num::zero() {
-            return Complex::from_real(
-                (z.real / z.abs().real).arccos() + Num::F64(std::f64::consts::PI),
-            );
-        }
-        Complex::from_real(Num::zero())
-    }
-
-    pub fn azimuthal(&self, units: DegreesType) -> Self {
-        match units {
-            DegreesType::Degrees => Complex::azimuthal_in_degrees(self),
-            DegreesType::Radians => Complex::azimuthal_in_radians(self),
+    /// Constructs a Complex from two f64 values
+    pub fn new(real: f64, imag: f64) -> Self {
+        Self {
+            real: Real::new(real),
+            imag: Real::new(imag)
         }
     }
 
-    pub fn zero() -> Self {
-        Complex::new(Num::zero(), Num::zero())
-    }
-
-    pub fn one() -> Self {
-        Complex::new(Num::one(), Num::zero())
-    }
-
-    pub fn i() -> Self {
-        Complex::new(Num::zero(), Num::one())
-    }
-
-    pub fn min_err() -> Self {
-        Complex::from_real(Num::F64(f64::EPSILON))
-    }
-
-    pub fn to_degrees(&self) -> Self {
-        if self.imag != Num::zero() {
-            panic!("Cannot convert imaginary value to degrees")
+    /// Returns whether or not `self` is real.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(3.0, 2.0);
+    /// assert!(!z.is_real());
+    /// let x = Complex::new(1.0, 0.0);
+    /// assert!(x.is_real());
+    /// let y = Complex::new(0.0, 1.0);
+    /// assert!(!y.is_real());
+    /// ```
+    pub fn is_real(&self) -> bool {
+        if approx_eq![self.imag.inner, 0.0] {
+            return true;
         }
-        *self * Complex::from_real(Num::U16(180))
-            / Complex::from_real(Num::F64(std::f64::consts::PI))
+        false
     }
 
-    pub fn to_radians(&self) -> Self {
-        if self.imag != Num::zero() {
-            panic!("Cannot convert imaginary value to radians")
+    /// Returns whether or not `self` is imaginary.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(3.0, 2.0);
+    /// assert!(!z.is_imaginary());
+    /// let x = Complex::new(23.0, 0.0);
+    /// assert!(!x.is_imaginary());
+    /// let y = Complex::new(0.0, 12.0);
+    /// assert!(y.is_imaginary());
+    /// ```
+    pub fn is_imaginary(&self) -> bool {
+        if approx_eq![self.real.inner, 0.0] {
+            return true;
         }
-        *self * Complex::from_real(Num::F64(std::f64::consts::PI))
-            / Complex::from_real(Num::U16(180))
+        false
     }
 
-    pub fn abs(&self) -> Self {
-        Complex::from_real((self.real.squared() + self.imag.squared()).sqrt())
+    /// Absolute value (aka. complex norm).
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(3.0, 4.0);
+    /// assert_eq!(z.abs(), Complex::new(5.0, 0.0));
+    /// ```
+    pub fn abs(&self) -> Complex {
+        let norm = (self.real*self.real + self.imag*self.imag).sqrt();
+        Complex::new(norm.unwrap().inner, 0.0)
     }
 
-    pub fn powi(&self, n: i32) -> Self {
-        self.powf(n as f64)
+    /// Complex exponentiation.
+    ///
+    /// Evaluates e to the power of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let e = Complex::new(std::f64::consts::E, 0.0);
+    /// let z = Complex::new(1.0, std::f64::consts::FRAC_PI_2);
+    /// assert_eq!(z.exp(), e*Complex::I);
+    /// ```
+    pub fn exp(&self) -> Complex {
+        let real_exp = Complex::new(self.real.exp().inner, 0.0);
+        let imag_exp = Complex::new(self.imag.cos().inner, self.imag.sin().inner);
+        real_exp*imag_exp
     }
 
-    pub fn squared(&self) -> Self {
-        self.powi(2)
-    }
-
-    pub fn powf(&self, n: f64) -> Self {
-        if self.imag == Num::zero() {
-            return Complex::from_real(self.real.powf(n));
-        }
-        let complex_n = Complex::from_real(Num::F64(n));
-        let sine = (complex_n * self.azimuthal(DegreesType::Radians)).sin();
-        let cosine = (complex_n * self.azimuthal(DegreesType::Radians)).cos();
-        self.abs().powf(n) * (cosine + Complex::i() * sine)
-    }
-
-    pub fn sqrt(&self) -> Self {
-        self.powf(0.5)
-    }
-
-    pub fn exp(&self) -> Self {
-        let real_exp = Complex::from_real(self.real.exp());
-        let imag_exp = Complex::from_real(self.imag.cos())
-            + Complex::from_real(self.imag).sin() * Complex::i();
-        real_exp + imag_exp
-    }
-
-    pub fn neg_exp(&self) -> Self {
-        Complex::one() / self.exp()
-    }
-
-    pub fn log(&self, base: f64) -> Self {
-        self.ln() / Complex::from_real(Num::F64(base)).ln()
-    }
-
-    pub fn log10(&self) -> Self {
-        self.log(10.0)
-    }
-
-    pub fn log2(&self) -> Self {
-        self.log(2.0)
-    }
-
-    #[allow(unconditional_recursion)]
-    pub fn ln(&self) -> Self {
-        let real_part = Complex::from_real(self.real).ln();
-        let imag_part = self.azimuthal(DegreesType::Degrees) * Complex::i();
-        real_part + imag_part
-    }
-
-    pub fn sin(&self) -> Self {
-        let num = (*self * Complex::i()).exp() - (-*self * Complex::i()).exp();
-        let den = Complex::from_real(Num::U8(2)) * Complex::i();
+    /// Complex sine.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let e = Complex::new(std::f64::consts::E, 0.0);
+    /// let z = Complex::new(1.0, std::f64::consts::FRAC_PI_2);
+    /// assert_eq!(z.sin(), e);
+    /// ```
+    pub fn sin(&self) -> Complex {
+        let num = self.exp() - (-*self).exp();
+        let den = Complex::new(2.0, 0.0)*Complex::I;
         num / den
     }
 
-    pub fn cos(&self) -> Self {
-        let num = (*self * Complex::i()).exp() + (-*self * Complex::i()).exp();
-        let den = Complex::from_real(Num::U8(2));
-        num / den
-    }
-
-    pub fn tan(&self) -> Self {
-        self.sin() / self.cos()
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.real == Num::zero() && self.imag == Num::zero()
-    }
-
-    pub fn in_half_plane(&self) -> bool {
-        self.imag > Num::zero()
-    }
-}
-
-impl std::fmt::Display for Complex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} + {}i", self.real, self.imag)
-    }
 }
 
 impl PartialEq for Complex {
     fn eq(&self, other: &Self) -> bool {
-        self.real == other.real && self.imag == other.imag
+        let reals_eq = approx_eq![self.real.inner, other.real.inner];
+        let imags_eq = approx_eq![self.imag.inner, other.imag.inner];
+        reals_eq && imags_eq
     }
 }
 
 impl Eq for Complex {}
 
-macro_rules! impl_complex_from_primitives {
-    ($t:ty, $num_variant:expr) => {
-        impl From<($t, $t)> for Complex {
-            fn from(value: ($t, $t)) -> Self {
-                Complex::new($num_variant(value.0), $num_variant(value.1))
-            }
-        }
-    };
-    ($left_t:ty, $left_variant:expr, $right_t:ty, $right_variant:expr) => {
-        impl From<($left_t, $right_t)> for Complex {
-            fn from(value: ($left_t, $right_t)) -> Self {
-                Complex::new($left_variant(value.0), $right_variant(value.1))
-            }
-        }
-    };
-}
-
-impl_complex_from_primitives![u8, Num::U8];
-impl_complex_from_primitives![u8, Num::U8, u16, Num::U16];
-impl_complex_from_primitives![u8, Num::U8, u32, Num::U32];
-impl_complex_from_primitives![u8, Num::U8, u64, Num::U64];
-impl_complex_from_primitives![u8, Num::U8, i8, Num::I8];
-impl_complex_from_primitives![u8, Num::U8, i16, Num::I16];
-impl_complex_from_primitives![u8, Num::U8, i32, Num::I32];
-impl_complex_from_primitives![u8, Num::U8, i64, Num::I64];
-impl_complex_from_primitives![u8, Num::U8, f32, Num::F32];
-impl_complex_from_primitives![u8, Num::U8, f64, Num::F64];
-
-impl_complex_from_primitives![u16, Num::U16];
-impl_complex_from_primitives![u16, Num::U16, u8, Num::U8];
-impl_complex_from_primitives![u16, Num::U16, u32, Num::U32];
-impl_complex_from_primitives![u16, Num::U16, u64, Num::U64];
-impl_complex_from_primitives![u16, Num::U16, i8, Num::I8];
-impl_complex_from_primitives![u16, Num::U16, i16, Num::I16];
-impl_complex_from_primitives![u16, Num::U16, i32, Num::I32];
-impl_complex_from_primitives![u16, Num::U16, i64, Num::I64];
-impl_complex_from_primitives![u16, Num::U16, f32, Num::F32];
-impl_complex_from_primitives![u16, Num::U16, f64, Num::F64];
-
-impl_complex_from_primitives![u32, Num::U32];
-impl_complex_from_primitives![u32, Num::U32, u8, Num::U8];
-impl_complex_from_primitives![u32, Num::U32, u16, Num::U16];
-impl_complex_from_primitives![u32, Num::U32, u64, Num::U64];
-impl_complex_from_primitives![u32, Num::U32, i8, Num::I8];
-impl_complex_from_primitives![u32, Num::U32, i16, Num::I16];
-impl_complex_from_primitives![u32, Num::U32, i32, Num::I32];
-impl_complex_from_primitives![u32, Num::U32, i64, Num::I64];
-impl_complex_from_primitives![u32, Num::U32, f32, Num::F32];
-impl_complex_from_primitives![u32, Num::U32, f64, Num::F64];
-
-impl_complex_from_primitives![u64, Num::U64];
-impl_complex_from_primitives![u64, Num::U64, u8, Num::U8];
-impl_complex_from_primitives![u64, Num::U64, u16, Num::U16];
-impl_complex_from_primitives![u64, Num::U64, u32, Num::U32];
-impl_complex_from_primitives![u64, Num::U64, i8, Num::I8];
-impl_complex_from_primitives![u64, Num::U64, i16, Num::I16];
-impl_complex_from_primitives![u64, Num::U64, i32, Num::I32];
-impl_complex_from_primitives![u64, Num::U64, i64, Num::I64];
-impl_complex_from_primitives![u64, Num::U64, f32, Num::F32];
-impl_complex_from_primitives![u64, Num::U64, f64, Num::F64];
-
-impl_complex_from_primitives![i8, Num::I8];
-impl_complex_from_primitives![i8, Num::I8, u8, Num::U8];
-impl_complex_from_primitives![i8, Num::I8, u16, Num::U16];
-impl_complex_from_primitives![i8, Num::I8, u32, Num::U32];
-impl_complex_from_primitives![i8, Num::I8, u64, Num::U64];
-impl_complex_from_primitives![i8, Num::I8, i16, Num::I16];
-impl_complex_from_primitives![i8, Num::I8, i32, Num::I32];
-impl_complex_from_primitives![i8, Num::I8, i64, Num::I64];
-impl_complex_from_primitives![i8, Num::I8, f32, Num::F32];
-impl_complex_from_primitives![i8, Num::I8, f64, Num::F64];
-
-impl_complex_from_primitives![i16, Num::I16];
-impl_complex_from_primitives![i16, Num::I16, u8, Num::U8];
-impl_complex_from_primitives![i16, Num::I16, u16, Num::U16];
-impl_complex_from_primitives![i16, Num::I16, u32, Num::U32];
-impl_complex_from_primitives![i16, Num::I16, u64, Num::U64];
-impl_complex_from_primitives![i16, Num::I16, i8, Num::I8];
-impl_complex_from_primitives![i16, Num::I16, i32, Num::I32];
-impl_complex_from_primitives![i16, Num::I16, i64, Num::I64];
-impl_complex_from_primitives![i16, Num::I16, f32, Num::F32];
-impl_complex_from_primitives![i16, Num::I16, f64, Num::F64];
-
-impl_complex_from_primitives![i32, Num::I32];
-impl_complex_from_primitives![i32, Num::I32, u8, Num::U8];
-impl_complex_from_primitives![i32, Num::I32, u16, Num::U16];
-impl_complex_from_primitives![i32, Num::I32, u32, Num::U32];
-impl_complex_from_primitives![i32, Num::I32, u64, Num::U64];
-impl_complex_from_primitives![i32, Num::I32, i8, Num::I8];
-impl_complex_from_primitives![i32, Num::I32, i16, Num::I16];
-impl_complex_from_primitives![i32, Num::I32, i64, Num::I64];
-impl_complex_from_primitives![i32, Num::I32, f32, Num::F32];
-impl_complex_from_primitives![i32, Num::I32, f64, Num::F64];
-
-impl_complex_from_primitives![i64, Num::I64];
-impl_complex_from_primitives![i64, Num::I64, u8, Num::U8];
-impl_complex_from_primitives![i64, Num::I64, u16, Num::U16];
-impl_complex_from_primitives![i64, Num::I64, u32, Num::U32];
-impl_complex_from_primitives![i64, Num::I64, u64, Num::U64];
-impl_complex_from_primitives![i64, Num::I64, i8, Num::I8];
-impl_complex_from_primitives![i64, Num::I64, i16, Num::I16];
-impl_complex_from_primitives![i64, Num::I64, i32, Num::I32];
-impl_complex_from_primitives![i64, Num::I64, f32, Num::F32];
-impl_complex_from_primitives![i64, Num::I64, f64, Num::F64];
-
-impl_complex_from_primitives![f32, Num::F32];
-impl_complex_from_primitives![f32, Num::F32, u8, Num::U8];
-impl_complex_from_primitives![f32, Num::F32, u16, Num::U16];
-impl_complex_from_primitives![f32, Num::F32, u32, Num::U32];
-impl_complex_from_primitives![f32, Num::F32, u64, Num::U64];
-impl_complex_from_primitives![f32, Num::F32, i8, Num::I8];
-impl_complex_from_primitives![f32, Num::F32, i16, Num::I16];
-impl_complex_from_primitives![f32, Num::F32, i32, Num::I32];
-impl_complex_from_primitives![f32, Num::F32, i64, Num::I64];
-impl_complex_from_primitives![f32, Num::F32, f64, Num::F64];
-
-impl_complex_from_primitives![f64, Num::F64];
-impl_complex_from_primitives![f64, Num::F64, u8, Num::U8];
-impl_complex_from_primitives![f64, Num::F64, u16, Num::U16];
-impl_complex_from_primitives![f64, Num::F64, u32, Num::U32];
-impl_complex_from_primitives![f64, Num::F64, u64, Num::U64];
-impl_complex_from_primitives![f64, Num::F64, i8, Num::I8];
-impl_complex_from_primitives![f64, Num::F64, i16, Num::I16];
-impl_complex_from_primitives![f64, Num::F64, i32, Num::I32];
-impl_complex_from_primitives![f64, Num::F64, i64, Num::I64];
-impl_complex_from_primitives![f64, Num::F64, f32, Num::F32];
-
 impl Add<Self> for Complex {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        let real_sum = self.real + other.real;
-        let imag_sum = self.imag + other.imag;
-        Complex::new(real_sum, imag_sum)
+        let real = (self.real + other.real).inner;
+        let imag = (self.imag + other.imag).inner;
+        Complex::new(real, imag)
     }
 }
 
 impl Sub<Self> for Complex {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
-        let real_diff = self.real - other.real;
-        let imag_diff = self.imag - other.imag;
-        Complex::new(real_diff, imag_diff)
+        let real = (self.real - other.real).inner;
+        let imag = (self.imag - other.imag).inner;
+        Complex::new(real, imag)
     }
 }
 
 impl Mul<Self> for Complex {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
-        let real_part = self.real * other.real - self.imag * other.imag;
-        let imag_part = self.real * other.imag + self.imag * other.real;
-        Complex::new(real_part, imag_part)
+        let real_part = self.real*other.real - self.imag*other.imag;
+        let imag_part = self.real*other.imag + self.imag*other.real;
+        Complex::new(real_part.inner, imag_part.inner)
     }
 }
 
 impl Div<Self> for Complex {
     type Output = Self;
     fn div(self, other: Self) -> Self {
-        let den = other.real.squared() + other.imag.squared();
-        let real_part = (self.real * other.real + self.imag * other.imag) / den;
-        let imag_part = (self.imag * other.real - self.real * other.imag) / den;
-        Complex::new(real_part, imag_part)
+        let real_num = self.real*other.real + self.imag*other.imag;
+        let imag_num = self.imag*other.real + self.real*other.imag;
+        let den = self.real.squared() + other.imag.squared();
+        Complex::new((real_num / den).inner, (imag_num / den).inner)
     }
 }
 
 impl Neg for Complex {
     type Output = Self;
     fn neg(self) -> Self {
-        Complex::new(-self.real, -self.imag)
+        Complex::new(-self.real.inner, -self.imag.inner)
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    mod test_real {
-
-        use super::*;
-
-        mod test_abs {
-
-            use super::*;
-
-            macro_rules! unsigned_abs_test {
-                ($name:ident, $num_variant:expr, $value:expr) => {
-                    #[test]
-                    fn $name() {
-                        let x = Real::new($num_variant($value));
-                        assert_eq!(x, x.abs());
-                    }
-                };
-            }
-
-            unsigned_abs_test! {usize, Num::USIZE, 12000}
-            unsigned_abs_test! {u8, Num::U8, 12}
-            unsigned_abs_test! {u16, Num::U16, 120}
-            unsigned_abs_test! {u32, Num::U32, 1200}
-            unsigned_abs_test! {u64, Num::U64, 12000}
-
-            macro_rules! signed_abs_test {
-                ($name:ident, $num_variant:expr, $value:expr) => {
-                    #[test]
-                    fn $name() {
-                        let x = Real::new($num_variant($value));
-                        assert_eq!(x, x.abs());
-                        let y = Real::new($num_variant(-$value));
-                        assert_eq!(y, -y.abs());
-                    }
-                };
-            }
-
-            signed_abs_test! {i8, Num::I8, 12}
-            signed_abs_test! {i16, Num::I16, 120}
-            signed_abs_test! {i32, Num::I32, 1200}
-            signed_abs_test! {i64, Num::I64, 12000}
-            signed_abs_test! {f32, Num::F32, 1200.0}
-            signed_abs_test! {f64, Num::F64, 12000.0}
+impl TryFrom<Complex> for Real {
+    type Error = ConversionError;
+    fn try_from(value: Complex) -> Result<Real, ConversionError> {
+        if value.is_real() {
+            return Ok(value.real);
         }
-
-        mod test_exponentials {
-
-            use super::*;
-
-            #[test]
-            fn exp() {
-                let e = Real::from(std::f64::consts::E);
-                assert!(e == Real::one().exp());
-                assert!(e.powi(2) == e * e);
-                assert!(e.powi(0) == Real::one());
-            }
-
-            mod test_logs {
-
-                use super::*;
-
-                #[test]
-                fn ln() {
-                    let e = Real::from(std::f64::consts::E);
-                    assert!(e.ln() == Real::one());
-                    assert!((e * e).ln() == Real::from(2));
-                }
-
-                #[test]
-                fn log10() {
-                    assert!(Real::from(10).log10() == Real::one());
-                    assert!(Real::from(100).log10() == Real::from(2));
-                }
-
-                #[test]
-                fn log2() {
-                    assert!(Real::from(2).log2() == Real::one());
-                    assert!(Real::from(8).log2() == Real::from(3));
-                }
-            }
-        }
-
-        mod test_trig {
-
-            use super::*;
-
-            mod test_circular {
-
-                use super::*;
-
-                #[test]
-                fn sin() {
-                    assert!(Real::from(std::f64::consts::PI).sin() == Real::zero());
-                    assert!(Real::from(std::f64::consts::FRAC_PI_2).sin() == Real::one());
-                    assert!((-Real::from(std::f64::consts::FRAC_PI_2)).sin() == -Real::one());
-                }
-
-                #[test]
-                fn cos() {
-                    assert!(Real::from(std::f64::consts::PI).cos() == -Real::one());
-                    assert!(Real::from(std::f64::consts::FRAC_PI_2).cos() == Real::zero());
-                    assert!((-Real::from(std::f64::consts::FRAC_PI_2)).cos() == Real::zero());
-                }
-
-                #[test]
-                fn tan() {
-                    assert!(Real::from(std::f64::consts::PI).tan() == Real::zero());
-                    assert!(Real::from(std::f64::consts::FRAC_PI_4).tan() == Real::one());
-                    assert!((-Real::from(std::f64::consts::FRAC_PI_4)).tan() == -Real::one());
-                }
-
-                #[test]
-                fn arcsin() {
-                    assert!(Real::zero().arcsin() == Real::zero());
-                    assert!(Real::one().arcsin() == Real::from(std::f64::consts::FRAC_PI_2));
-                    assert!((-Real::one()).arcsin() == -Real::from(std::f64::consts::FRAC_PI_2));
-                }
-
-                #[test]
-                fn arccos() {
-                    assert!(Real::zero().arccos() == Real::from(std::f64::consts::FRAC_PI_2));
-                    assert!(Real::one().arccos() == Real::zero());
-                    assert!((-Real::one()).arccos() == Real::from(std::f64::consts::PI))
-                }
-
-                #[test]
-                fn arctan() {
-                    assert!(Real::zero().arctan() == Real::zero());
-                    assert!(Real::one().arctan() == Real::from(std::f64::consts::FRAC_PI_4));
-                    assert!((-Real::one()).arctan() == -Real::from(std::f64::consts::FRAC_PI_4));
-                }
-            }
-
-            mod test_hyperbolic {
-
-                use super::*;
-
-                #[test]
-                fn sinh() {
-                    assert!(Real::from(1.0_f64.sinh()) == Real::from(1.1752011936438014));
-                }
-
-                #[test]
-                fn cosh() {
-                    assert!(Real::from(1.0_f64.cosh()) == Real::from(1.5430806348152437));
-                }
-
-                #[test]
-                fn tanh() {
-                    assert!(Real::from(1.0_f64.tanh()) == Real::from(0.7615941559557649));
-                }
-
-                fn arcsinh_substitution(value: Real) -> Real {
-                    (value + (value.powi(2) + Real::one()).sqrt()).ln()
-                }
-
-                #[test]
-                fn arcsinh() {
-                    assert_eq!(
-                        arcsinh_substitution(Real::one()),
-                        Real::from(1.0_f64).arcsinh()
-                    );
-                    assert_eq!(
-                        arcsinh_substitution(Real::from(0.5)),
-                        Real::from(0.5_f64).arcsinh()
-                    );
-                }
-
-                fn arccosh_substitution(value: Real) -> Real {
-                    (value + (value.powi(2) - Real::one()).sqrt()).ln()
-                }
-
-                #[test]
-                fn arccosh() {
-                    assert_eq!(
-                        arccosh_substitution(Real::one()),
-                        Real::from(1.0_f64).arccosh()
-                    );
-                    assert_eq!(
-                        arccosh_substitution(Real::from(1.5)),
-                        Real::from(1.5_f64).arccosh()
-                    );
-                }
-
-                fn arctanh_substitution(value: Real) -> Real {
-                    Real::from(0.5) * ((Real::one() + value) / (Real::one() - value)).ln()
-                }
-
-                #[test]
-                fn arctanh() {
-                    assert_eq!(arctanh_substitution(Real::zero()), Real::zero());
-                    assert_eq!(
-                        arctanh_substitution(Real::from(0.5_f64)),
-                        Real::from(0.5493061443340549)
-                    );
-                }
-            }
-        }
-
-        #[test]
-        fn is_positive() {
-            assert!(Real::from(2).positive());
-            assert!(Real::from(2.0).positive());
-            assert!(Real::from(1.5).positive());
-            assert!(!Real::from(0).positive());
-            assert!(!Real::from(0.0).positive());
-            assert!(!Real::from(-0.0).positive());
-            assert!(!Real::from(-0).positive());
-            assert!(!Real::from(-1.5).positive());
-            assert!(!Real::from(-2.0).positive());
-            assert!(!Real::from(-2).positive());
-        }
-
-        #[test]
-        fn is_negative() {
-            assert!(!Real::from(2).negative());
-            assert!(!Real::from(2.0).negative());
-            assert!(!Real::from(1.5).negative());
-            assert!(!Real::from(0).negative());
-            assert!(!Real::from(0.0).negative());
-            assert!(!Real::from(-0.0).negative());
-            assert!(!Real::from(-0).negative());
-            assert!(Real::from(-1.5).negative());
-            assert!(Real::from(-2.0).negative());
-            assert!(Real::from(-2).negative());
-        }
-
-        #[test]
-        fn is_zero() {
-            assert!(!Real::from(2).is_zero());
-            assert!(!Real::from(1.5).is_zero());
-            assert!(Real::from(0).is_zero());
-            assert!(Real::from(0.0).is_zero());
-            assert!(Real::from(-0.0).is_zero());
-            assert!(Real::from(-0).is_zero());
-            assert!(!Real::from(-1.5).is_zero());
-            assert!(!Real::from(-2.0).is_zero());
-            assert!(!Real::from(-2).is_zero());
-        }
+        Err(ConversionError)
     }
 }
