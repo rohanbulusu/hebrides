@@ -604,9 +604,7 @@ impl_real_from_primitive![f64];
 /// Representation of complex numbers
 #[derive(Copy, Clone, Debug)]
 pub struct Complex {
-    /// Real part of the number in question
     real: Real,
-    /// Imaginary part of the number in question
     imag: Real
 }
 
