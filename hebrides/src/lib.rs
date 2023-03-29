@@ -605,9 +605,9 @@ impl_real_from_primitive![f64];
 #[derive(Copy, Clone, Debug)]
 pub struct Complex {
     /// Real part of the number in question
-    pub real: Real,
+    real: Real,
     /// Imaginary part of the number in question
-    pub imag: Real
+    imag: Real
 }
 
 impl Complex {
