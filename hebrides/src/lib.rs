@@ -126,9 +126,10 @@ impl Angle {
 /// these classes is f64 (not counting the impossibility of completely 
 /// describing irrational numbers as decimals), which is why it's used as the
 /// struct's internal representation of real values.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialOrd)]
 pub struct Real {
-    inner: f64
+    /// Internal representation of the number
+    pub inner: f64
 }
 
 impl Real {
@@ -517,6 +518,12 @@ impl Real {
 
 }
 
+impl std::fmt::Display for Real {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
 impl PartialEq for Real {
     fn eq(&self, other: &Self) -> bool {
         approx_eq![self.inner, other.inner]
@@ -586,8 +593,10 @@ impl_real_from_primitive![f64];
 /// Representation of complex numbers
 #[derive(Copy, Clone, Debug)]
 pub struct Complex {
-    real: Real,
-    imag: Real
+    /// Real part of the number in question
+    pub real: Real,
+    /// Imaginary part of the number in question
+    pub imag: Real
 }
 
 impl Complex {
@@ -666,6 +675,10 @@ impl Complex {
     /// let e = Complex::new(std::f64::consts::E, 0.0);
     /// let z = Complex::new(1.0, std::f64::consts::FRAC_PI_2);
     /// assert_eq!(z.exp(), e*Complex::I);
+    /// let q = Complex::new(1.0, 1.0);
+    /// assert_eq!(q.exp(), Complex::new(1.46869394, 2.28735529));
+    /// let w = Complex::new(3.0, 7.0);
+    /// assert_eq!(w.exp(), Complex::new(15.1425316, 13.1959286))
     /// ```
     pub fn exp(&self) -> Complex {
         let real_exp = Complex::new(self.real.exp().inner, 0.0);
@@ -683,10 +696,119 @@ impl Complex {
     /// ```
     pub fn sin(&self) -> Complex {
         let num = self.exp() - (-*self).exp();
-        let den = Complex::new(2.0, 0.0)*Complex::I;
+        let den = Complex::new(0.0, 2.0);
         num / den
     }
 
+    /// Complex cosine.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(0.0, 0.0);
+    /// assert_eq!(z.cos(), Complex::new(1.0, 0.0));
+    /// let w = Complex::new(1.0, 2.0);
+    /// assert_eq!(w.cos(), Complex::new(2.0327230070196656, -3.0518977991517997));
+    /// ```
+    pub fn cos(&self) -> Complex {
+        let power = Complex::I * *self;
+        let num = power.exp() + (-power).exp();
+        let den = Complex::new(2.0, 0.0);
+        num / den
+    }
+
+    /// Complex tangent.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(2.0, 3.0);
+    /// assert_eq!(z.tan(), Complex::new(-0.00376402564, 1.00323863));
+    /// ```
+    pub fn tan(&self) -> Complex {
+        self.sin() / self.cos()
+    }
+
+    /// Complex natural logarithm.
+    ///
+    /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(3.0, 4.0);
+    /// assert_eq!(z.ln(), Complex::new(5.0_f64.ln(), 0.8_f64.asin()));
+    /// ```
+    pub fn ln(&self) -> Complex {
+        if self.is_real() {
+            return Complex::new(self.real.ln().unwrap().inner, 0.0);
+        }
+        Complex::new(self.norm().ln().unwrap().inner, self.azimuthal().to_radians())
+    }
+
+    /// Complex norm.
+    ///
+    /// Returns the absolute value of `self`. If `self` is interpreted as a vector,
+    /// this is its length. The norm is always a positive real number.
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let z = Complex::new(3.0, 4.0);
+    /// assert_eq!(z.norm(), Real::new(5.0));
+    /// let w = Complex::new(5.0, 12.0);
+    /// assert_eq!(w.norm(), Real::new(13.0));
+    /// ```
+    pub fn norm(&self) -> Real {
+        let length = (self.real.powi(2) + self.imag.powi(2)).sqrt();
+        Real::new(length.unwrap().inner)
+    }
+
+    /// Azimuthal angle.
+    ///
+    /// Returns the azimuthal angle of `self`. Its range is from [0, 2pi).
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let w = Complex::new(3.0, 4.0);
+    /// assert_eq!(w.azimuthal().to_radians(), 0.8_f64.asin());
+    /// ```
+    pub fn azimuthal(&self) -> Angle {
+        if approx_eq![self.imag.inner, 0.0] {
+            if self.real > Real::ZERO {
+                return Angle::from_radians(0.0);
+            }
+            return Angle::from_radians(std::f64::consts::PI);
+        }
+        if approx_eq![self.real.inner, 0.0] {
+            if self.imag > Real::ZERO {
+                return Angle::from_radians(std::f64::consts::FRAC_PI_2);
+            }
+            return Angle::from_radians(3.0*std::f64::consts::FRAC_PI_2);
+        }
+        // quadrant I
+        if self.real > Real::ZERO && self.imag > Real::ZERO {
+            return (self.imag / self.norm()).arcsin().unwrap();
+        }
+        // quadrant II
+        if self.real < Real::ZERO && self.imag > Real::ZERO {
+            let angle = std::f64::consts::PI + (self.imag / self.norm()).arcsin().unwrap().to_radians();
+            return  Angle::from_radians(angle);
+        }
+        // quadrant III
+        if self.real < Real::ZERO && self.imag < Real::ZERO {
+            let angle = std::f64::consts::PI + (-self.imag / self.norm()).arcsin().unwrap().to_radians();
+            return Angle::from_radians(angle);
+        }
+        // quadrant IV
+        if self.real > Real::ZERO && self.imag < Real::ZERO {
+            return (self.imag / self.norm()).arcsin().unwrap();
+        }
+        return Angle::from_radians(0.0);
+    }
+
+}
+
+impl std::fmt::Display for Complex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} + {}i", self.real, self.imag)
+    }
 }
 
 impl PartialEq for Complex {
@@ -730,8 +852,8 @@ impl Div<Self> for Complex {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         let real_num = self.real*other.real + self.imag*other.imag;
-        let imag_num = self.imag*other.real + self.real*other.imag;
-        let den = self.real.squared() + other.imag.squared();
+        let imag_num = self.imag*other.real - self.real*other.imag;
+        let den = other.real.squared() + other.imag.squared();
         Complex::new((real_num / den).inner, (imag_num / den).inner)
     }
 }
@@ -751,4 +873,29 @@ impl TryFrom<Complex> for Real {
         }
         Err(ConversionError)
     }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    mod complex {
+
+        use super::*;
+
+        #[test]
+        fn division() {
+            assert_eq!(Complex::new(4.0, 2.0) / Complex::new(2.0, 0.0), Complex::new(2.0, 1.0));
+            assert_eq!(Complex::new(4.0, 2.0) / Complex::new(0.0, 2.0), Complex::new(1.0, -2.0));
+        }
+
+        #[test]
+        fn multiplication() {
+            assert_eq!(Complex::ONE*Complex::new(12.0, 1.0), Complex::new(12.0, 1.0));
+            assert_eq!(Complex::new(1.0, 2.0)*Complex::new(3.0, 4.0), Complex::new(-5.0, 10.0));
+        }
+
+    }
+
 }
