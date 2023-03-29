@@ -129,7 +129,7 @@ impl Angle {
 #[derive(Copy, Clone, Debug, PartialOrd)]
 pub struct Real {
     /// Internal representation of the number
-    pub inner: f64
+    inner: f64
 }
 
 impl Real {
@@ -144,6 +144,18 @@ impl Real {
     pub fn new(inner: f64) -> Self {
         Real { inner }
     }
+
+    /// Returns a copy of `self` as an f64.
+    ///
+    /// ```
+    /// # use hebrides::Real;
+    /// let y = Real::new(12.34);
+    /// assert_eq!(y.value(), 12.34);
+    /// ```
+    pub fn value(&self) -> f64 {
+        self.inner
+    }
+
 
     /// Whether or not `self` is positive.
     /// 
