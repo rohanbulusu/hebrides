@@ -128,7 +128,6 @@ impl Angle {
 /// struct's internal representation of real values.
 #[derive(Copy, Clone, Debug, PartialOrd)]
 pub struct Real {
-    /// Internal representation of the number
     inner: f64
 }
 
