@@ -1063,15 +1063,27 @@ mod tests {
         use super::*;
 
         #[test]
-        fn division() {
-            assert_eq!(Complex::new(4.0, 2.0) / Complex::new(2.0, 0.0), Complex::new(2.0, 1.0));
-            assert_eq!(Complex::new(4.0, 2.0) / Complex::new(0.0, 2.0), Complex::new(1.0, -2.0));
+        fn addition() {
+            assert_eq!(Complex::ONE + Complex::new(12.0, 23.0), Complex::new(13.0, 23.0));
+            assert_eq!(Complex::I + Complex::new(12.0, 23.0), Complex::new(12.0, 24.0));
+        }
+
+        #[test]
+        fn subtraction() {
+            assert_eq!(Complex::ONE - Complex::new(12.0, 23.0), Complex::new(-11.0, -23.0));
+            assert_eq!(Complex::I - Complex::new(12.0, 23.0), Complex::new(-12.0, -22.0));
         }
 
         #[test]
         fn multiplication() {
             assert_eq!(Complex::ONE*Complex::new(12.0, 1.0), Complex::new(12.0, 1.0));
             assert_eq!(Complex::new(1.0, 2.0)*Complex::new(3.0, 4.0), Complex::new(-5.0, 10.0));
+        }
+
+        #[test]
+        fn division() {
+            assert_eq!(Complex::new(4.0, 2.0) / Complex::new(2.0, 0.0), Complex::new(2.0, 1.0));
+            assert_eq!(Complex::new(4.0, 2.0) / Complex::new(0.0, 2.0), Complex::new(1.0, -2.0));
         }
 
     }
