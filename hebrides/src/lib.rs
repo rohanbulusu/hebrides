@@ -825,6 +825,17 @@ impl Complex {
         coefficient * (num / den).ln()
     }
 
+    /// Complex hyperbolic sine.
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let z = Complex::new(3.0, 2.0);
+    /// assert_eq!(z.sinh(), Complex::new(-4.168906959966565, 9.154499146911428));
+    /// ```
+    pub fn sinh(&self) -> Complex {
+        (self.exp() - ((-*self).exp())) / Real::new(2.0).to_complex()
+    }
+
     /// Complex natural logarithm.
     ///
     /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
