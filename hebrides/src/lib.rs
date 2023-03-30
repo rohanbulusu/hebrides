@@ -858,6 +858,21 @@ impl Complex {
         (self.exp() - (-*self).exp()) / (self.exp() + (-*self).exp())
     }
 
+    /// Complex inverse hyperbolic sine.
+    pub fn arcsinh(&self) -> Complex {
+        todo!()
+    }
+
+    /// Complex inverse hyperbolic cosine.
+    pub fn arccosh(&self) -> Complex {
+        todo!()
+    }
+
+    /// Complex inverse hyperbolic tangent.
+    pub fn arctanh(&self) -> Complex {
+        todo!()
+    }
+
     /// Complex natural logarithm.
     ///
     /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
