@@ -768,7 +768,7 @@ impl Complex {
     /// as might be expected based off of the behavior of the arcsine implementation on
     /// [`Real`].
     ///
-    /// Mathematical grounding for the implementation can be found at 
+    /// Mathematical justification for the implementation can be found at 
     /// [ProofWiki](https://proofwiki.org/wiki/Definition:Inverse_Sine/Complex).
     ///
     /// ```
@@ -788,7 +788,7 @@ impl Complex {
     /// as might be expected based off of the behavior of the arccosine implementation on
     /// [`Real`].
     ///
-    /// Mathematical grounding for the implementation can be found at 
+    /// Mathematical justification for the implementation can be found at 
     /// [ProofWiki](https://proofwiki.org/wiki/Definition:Inverse_Cosine/Complex/Arccosine).
     ///
     /// ```
@@ -800,6 +800,29 @@ impl Complex {
     /// ```
     pub fn arccos(&self) -> Complex {
         -Complex::I * (*self + (self.squared() - Complex::ONE).sqrt()).ln()
+    }
+
+    /// Complex arctan.
+    ///
+    /// Even if `self` is real, this will return only a [`Complex`] and not an [`Angle`]
+    /// as might be expected based off of the behavior of the arctangent implementation on
+    /// [`Real`].
+    ///
+    /// Mathematical justification for the implementation can be found at
+    /// [ProofWiki](https://proofwiki.org/wiki/Definition:Inverse_Tangent/Complex).
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let x = Complex::new(0.8, 0.0);
+    /// assert_eq!(x.arctan(), Real::new(Real::new(0.8).arctan().to_radians()).to_complex());
+    /// let z = Complex::new(2.0, 3.0);
+    /// assert_eq!(z.arctan(), Complex::new(1.4099210495965755, 0.22907268296853875));
+    /// ```
+    pub fn arctan(&self) -> Complex {
+        let coefficient = -Complex::I / Real::new(2.0).to_complex();
+        let num = Complex::I - *self;
+        let den = Complex::I + *self;
+        coefficient * (num / den).ln()
     }
 
     /// Complex natural logarithm.
