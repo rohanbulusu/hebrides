@@ -524,6 +524,17 @@ impl Real {
         Ok(Real::new(self.inner.log(base as f64)))
     }
 
+    /// Constructs a [`Complex`] from `self`.
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let x = Real::new(3.0);
+    /// assert_eq!(x.to_complex(), Complex::new(3.0, 0.0));
+    /// ```
+    pub fn to_complex(&self) -> Complex {
+        Complex::new(self.inner, 0.0)
+    }
+
 }
 
 impl std::fmt::Display for Real {
@@ -843,6 +854,20 @@ impl Complex {
     /// ```
     pub fn squared(&self) -> Complex {
         *self * *self
+    }
+
+    /// Returns the square root of `self`.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(2.0, 3.0);
+    /// assert_eq!(z.sqrt(), Complex::new(1.67414922803554, 0.8959774761298381));
+    /// ```
+    pub fn sqrt(&self) -> Complex {
+        let root_r = self.norm().sqrt().unwrap().to_complex();
+        let theta = self.azimuthal().to_radians();
+        root_r * Complex::new(((1.0 + theta.cos()) / 2.0).sqrt(), ((1.0 - theta.cos()) / 2.0).sqrt())
+        
     }
 
 }
