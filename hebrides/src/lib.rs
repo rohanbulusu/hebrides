@@ -769,7 +769,7 @@ impl Complex {
     /// [`Real`].
     ///
     /// Mathematical grounding for the implementation can be found at 
-    /// <https://proofwiki.org/wiki/Definition:Inverse_Sine/Complex>
+    /// [ProofWiki](https://proofwiki.org/wiki/Definition:Inverse_Sine/Complex).
     ///
     /// ```
     /// # use hebrides::{Real, Complex};
