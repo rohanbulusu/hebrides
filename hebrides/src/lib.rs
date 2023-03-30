@@ -834,6 +834,17 @@ impl Complex {
         return Angle::from_radians(0.0);
     }
 
+    /// Returns `self` squared.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(-2.0, 3.0);
+    /// assert_eq!(z.squared(), Complex::new(-5.0, -12.0));
+    /// ```
+    pub fn squared(&self) -> Complex {
+        *self * *self
+    }
+
 }
 
 impl std::fmt::Display for Complex {
