@@ -762,6 +762,26 @@ impl Complex {
         self.sin() / self.cos()
     }
 
+    /// Complex arcsin.
+    ///
+    /// Even if `self` is real, this will return only a [`Complex`] and not an [`Angle`]
+    /// as might be expected based off of the behavior of the arcsine implementation on
+    /// [`Real`].
+    ///
+    /// Mathematical grounding for the implementation can be found at 
+    /// <https://proofwiki.org/wiki/Definition:Inverse_Sine/Complex>
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let x = Complex::new(0.8, 0.0);
+    /// assert_eq!(x.arcsin(), Real::new(Real::new(0.8).arcsin().unwrap().to_radians()).to_complex());
+    /// let z = Complex::new(2.0, 3.0);
+    /// assert_eq!(z.arcsin(), Complex::new(1.5413069599437077, -1.3679718444908728));
+    /// ```
+    pub fn arcsin(&self) -> Complex {
+        -Complex::I * (*self*Complex::I + (Complex::ONE - self.squared()).sqrt()).ln()
+    }
+
     /// Complex natural logarithm.
     ///
     /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
