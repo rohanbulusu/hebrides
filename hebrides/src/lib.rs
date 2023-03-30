@@ -847,6 +847,17 @@ impl Complex {
         (self.exp() + ((-*self).exp())) / Real::new(2.0).to_complex()
     }
 
+    /// Complex hyperbolic tangent.
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let z = Complex::new(3.0, 2.0);
+    /// assert_eq!(z.tanh(), Complex::new(1.0032386273536098, -0.0037640256415040815));
+    /// ```
+    pub fn tanh(&self) -> Complex {
+        (self.exp() - (-*self).exp()) / (self.exp() + (-*self).exp())
+    }
+
     /// Complex natural logarithm.
     ///
     /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
