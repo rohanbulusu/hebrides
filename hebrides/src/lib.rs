@@ -12,13 +12,10 @@ use std::ops::{Add, Sub, Mul, Div, Neg};
 /// 
 /// ```
 /// # use hebrides::approx_eq;
-/// approx_eq![0.3*0.2, 0.06];
+/// approx_eq(0.3_f64*0.2_f64, 0.06_f64);
 /// ```
-#[macro_export]
-macro_rules! approx_eq {
-    ($a:expr, $b:expr) => {
-        ($a - $b) <= f64::EPSILON
-    }
+pub fn approx_eq(left: f64, right: f64) -> bool {
+    (left - right).abs() <= f64::EPSILON
 }
 
 /// Error type for errors involving domain restrictions.
@@ -126,7 +123,7 @@ impl Angle {
 /// these classes is f64 (not counting the impossibility of completely 
 /// describing irrational numbers as decimals), which is why it's used as the
 /// struct's internal representation of real values.
-#[derive(Copy, Clone, Debug, PartialOrd)]
+#[derive(Copy, Clone, Debug)]
 pub struct Real {
     inner: f64
 }
@@ -239,7 +236,7 @@ impl Real {
     /// ```
     /// # use hebrides::Real;
     /// let theta = Real::new(std::f64::consts::PI);
-    /// assert_eq!(theta.cos(), Real::ONE);
+    /// assert_eq!(theta.cos(), -Real::ONE);
     /// ```
     pub fn cos(&self) -> Self {
         Real::new(self.inner.cos())
@@ -439,9 +436,9 @@ impl Real {
     /// ```
     /// # use hebrides::Real;
     /// let x = Real::new(2.0);
-    /// assert_eq!(x, Real::new(4.0));
+    /// assert_eq!(x.squared(), Real::new(4.0));
     /// let y = Real::new(-2.0);
-    /// assert_eq!(y, Real::new(4.0));
+    /// assert_eq!(y.squared(), Real::new(4.0));
     /// ```
     pub fn squared(&self) -> Self {
         self.powi(2)
@@ -537,11 +534,29 @@ impl std::fmt::Display for Real {
 
 impl PartialEq for Real {
     fn eq(&self, other: &Self) -> bool {
-        approx_eq![self.inner, other.inner]
+        approx_eq(self.inner, other.inner)
     }
 }
 
 impl Eq for Real {}
+
+impl PartialOrd for Real {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Real {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.inner < other.inner {
+            return std::cmp::Ordering::Less;
+        }
+        if self.inner > other.inner {
+            return std::cmp::Ordering::Greater;
+        }
+        std::cmp::Ordering::Equal
+    }
+}
 
 impl Add<Self> for Real {
     type Output = Self;
@@ -639,7 +654,7 @@ impl Complex {
     /// assert!(!y.is_real());
     /// ```
     pub fn is_real(&self) -> bool {
-        if approx_eq![self.imag.inner, 0.0] {
+        if approx_eq(self.imag.inner, 0.0) {
             return true;
         }
         false
@@ -657,7 +672,7 @@ impl Complex {
     /// assert!(y.is_imaginary());
     /// ```
     pub fn is_imaginary(&self) -> bool {
-        if approx_eq![self.real.inner, 0.0] {
+        if approx_eq(self.real.inner, 0.0) {
             return true;
         }
         false
@@ -685,9 +700,9 @@ impl Complex {
     /// let z = Complex::new(1.0, std::f64::consts::FRAC_PI_2);
     /// assert_eq!(z.exp(), e*Complex::I);
     /// let q = Complex::new(1.0, 1.0);
-    /// assert_eq!(q.exp(), Complex::new(1.46869394, 2.28735529));
+    /// assert_eq!(q.exp(), Complex::new(1.4686939399158851, 2.2873552871788423));
     /// let w = Complex::new(3.0, 7.0);
-    /// assert_eq!(w.exp(), Complex::new(15.1425316, 13.1959286))
+    /// assert_eq!(w.exp(), Complex::new(15.142531566086864, 13.195928586605717))
     /// ```
     pub fn exp(&self) -> Complex {
         let real_exp = Complex::new(self.real.exp().inner, 0.0);
@@ -699,12 +714,12 @@ impl Complex {
     ///
     /// ```
     /// # use hebrides::Complex;
-    /// let e = Complex::new(std::f64::consts::E, 0.0);
     /// let z = Complex::new(1.0, std::f64::consts::FRAC_PI_2);
-    /// assert_eq!(z.sin(), e);
+    /// assert_eq!(z.sin(), Complex::new(2.1114008854951747, 1.2433971034084503));
     /// ```
     pub fn sin(&self) -> Complex {
-        let num = self.exp() - (-*self).exp();
+        let power = Complex::I * *self;
+        let num = power.exp() - (-power).exp();
         let den = Complex::new(0.0, 2.0);
         num / den
     }
@@ -730,7 +745,7 @@ impl Complex {
     /// ```
     /// # use hebrides::Complex;
     /// let z = Complex::new(2.0, 3.0);
-    /// assert_eq!(z.tan(), Complex::new(-0.00376402564, 1.00323863));
+    /// assert_eq!(z.tan(), Complex::new(-0.0037640256415040815, 1.0032386273536098));
     /// ```
     pub fn tan(&self) -> Complex {
         self.sin() / self.cos()
@@ -765,7 +780,7 @@ impl Complex {
     /// assert_eq!(w.norm(), Real::new(13.0));
     /// ```
     pub fn norm(&self) -> Real {
-        let length = (self.real.powi(2) + self.imag.powi(2)).sqrt();
+        let length = (self.real.squared() + self.imag.squared()).sqrt();
         Real::new(length.unwrap().inner)
     }
 
@@ -777,32 +792,39 @@ impl Complex {
     /// # use hebrides::Complex;
     /// let w = Complex::new(3.0, 4.0);
     /// assert_eq!(w.azimuthal().to_radians(), 0.8_f64.asin());
+    /// let v = Complex::new(-3.0, 4.0);
+    /// assert_eq!(v.azimuthal().to_radians(), std::f64::consts::PI - 0.8_f64.asin());
     /// ```
     pub fn azimuthal(&self) -> Angle {
-        if approx_eq![self.imag.inner, 0.0] {
+        if approx_eq(self.imag.inner, 0.0) {
             if self.real > Real::ZERO {
                 return Angle::from_radians(0.0);
             }
             return Angle::from_radians(std::f64::consts::PI);
         }
-        if approx_eq![self.real.inner, 0.0] {
+        if approx_eq(self.real.inner, 0.0) {
             if self.imag > Real::ZERO {
+                eprintln!("{}, {}", self.real.inner, approx_eq(self.real.inner, 0.0));
+                eprintln!("{}, norm: {}", self, self.norm());
                 return Angle::from_radians(std::f64::consts::FRAC_PI_2);
             }
             return Angle::from_radians(3.0*std::f64::consts::FRAC_PI_2);
         }
         // quadrant I
         if self.real > Real::ZERO && self.imag > Real::ZERO {
+            
             return (self.imag / self.norm()).arcsin().unwrap();
         }
         // quadrant II
         if self.real < Real::ZERO && self.imag > Real::ZERO {
-            let angle = std::f64::consts::PI + (self.imag / self.norm()).arcsin().unwrap().to_radians();
+            let angle = std::f64::consts::PI - (self.imag / self.norm()).arcsin().unwrap().to_radians();
+            
             return  Angle::from_radians(angle);
         }
         // quadrant III
         if self.real < Real::ZERO && self.imag < Real::ZERO {
             let angle = std::f64::consts::PI + (-self.imag / self.norm()).arcsin().unwrap().to_radians();
+            
             return Angle::from_radians(angle);
         }
         // quadrant IV
@@ -822,8 +844,8 @@ impl std::fmt::Display for Complex {
 
 impl PartialEq for Complex {
     fn eq(&self, other: &Self) -> bool {
-        let reals_eq = approx_eq![self.real.inner, other.real.inner];
-        let imags_eq = approx_eq![self.imag.inner, other.imag.inner];
+        let reals_eq = approx_eq(self.real.inner, other.real.inner);
+        let imags_eq = approx_eq(self.imag.inner, other.imag.inner);
         reals_eq && imags_eq
     }
 }
