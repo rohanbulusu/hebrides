@@ -836,6 +836,17 @@ impl Complex {
         (self.exp() - ((-*self).exp())) / Real::new(2.0).to_complex()
     }
 
+    /// Complex hyperbolic cosine.
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let z = Complex::new(3.0, 2.0);
+    /// assert_eq!(z.cosh(), Complex::new(-4.189625690968807, 9.109227893755337));
+    /// ```
+    pub fn cosh(&self) -> Complex {
+        (self.exp() + ((-*self).exp())) / Real::new(2.0).to_complex()
+    }
+
     /// Complex natural logarithm.
     ///
     /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
