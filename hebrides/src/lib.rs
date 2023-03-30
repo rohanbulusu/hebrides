@@ -782,6 +782,26 @@ impl Complex {
         -Complex::I * (*self*Complex::I + (Complex::ONE - self.squared()).sqrt()).ln()
     }
 
+    /// Complex arccos.
+    /// 
+    /// Even if `self` is real, this will return only a [`Complex`] and not an [`Angle`]
+    /// as might be expected based off of the behavior of the arccosine implementation on
+    /// [`Real`].
+    ///
+    /// Mathematical grounding for the implementation can be found at 
+    /// [ProofWiki](https://proofwiki.org/wiki/Definition:Inverse_Cosine/Complex/Arccosine).
+    ///
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let x = Complex::new(0.8, 0.0);
+    /// assert_eq!(x.arccos(), Real::new(Real::new(0.8).arccos().unwrap().to_radians()).to_complex());
+    /// let z = Complex::new(2.0, 3.0);
+    /// assert_eq!(z.arccos(), Complex::new(1.0001435424737972, -1.9833870299165355));
+    /// ```
+    pub fn arccos(&self) -> Complex {
+        -Complex::I * (*self + (self.squared() - Complex::ONE).sqrt()).ln()
+    }
+
     /// Complex natural logarithm.
     ///
     /// Computes the natural logarithm of `self` on the principal branch of Ln(x).
