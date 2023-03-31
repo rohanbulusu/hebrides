@@ -14,7 +14,7 @@ use std::ops::{Add, Sub, Mul, Div, Neg};
 /// # use hebrides::approx_eq;
 /// approx_eq(0.3_f64*0.2_f64, 0.06_f64);
 /// ```
-pub fn approx_eq(left: f64, right: f64) -> bool {
+pub(self) fn approx_eq(left: f64, right: f64) -> bool {
     (left - right).abs() <= f64::EPSILON
 }
 
