@@ -2,6 +2,11 @@
 name = "hebrides"
 version = "0.1.0"
 edition = "2021"
+description = "Implementations for the real, complex, and p-adic numbers"
+readme = "README.md"
+repository = "https://github.com/rohanbulusu/hebrides"
+license = "MIT"
+license-file = "LICENSE.txt"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
