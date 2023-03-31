@@ -9,11 +9,6 @@
 use std::ops::{Add, Sub, Mul, Div, Neg};
 
 /// Evaluates approximate equality betwen two values.
-/// 
-/// ```
-/// # use hebrides::approx_eq;
-/// approx_eq(0.3_f64*0.2_f64, 0.06_f64);
-/// ```
 pub(self) fn approx_eq(left: f64, right: f64) -> bool {
     (left - right).abs() <= f64::EPSILON
 }
@@ -828,7 +823,7 @@ impl Complex {
     /// Complex hyperbolic sine.
     ///
     /// ```
-    /// # use hebrides::{Real, Complex};
+    /// # use hebrides::Complex;
     /// let z = Complex::new(3.0, 2.0);
     /// assert_eq!(z.sinh(), Complex::new(-4.168906959966565, 9.154499146911428));
     /// ```
@@ -839,7 +834,7 @@ impl Complex {
     /// Complex hyperbolic cosine.
     ///
     /// ```
-    /// # use hebrides::{Real, Complex};
+    /// # use hebrides::Complex;
     /// let z = Complex::new(3.0, 2.0);
     /// assert_eq!(z.cosh(), Complex::new(-4.189625690968807, 9.109227893755337));
     /// ```
@@ -850,7 +845,7 @@ impl Complex {
     /// Complex hyperbolic tangent.
     ///
     /// ```
-    /// # use hebrides::{Real, Complex};
+    /// # use hebrides::Complex;
     /// let z = Complex::new(3.0, 2.0);
     /// assert_eq!(z.tanh(), Complex::new(1.0032386273536098, -0.0037640256415040815));
     /// ```
@@ -859,8 +854,17 @@ impl Complex {
     }
 
     /// Complex inverse hyperbolic sine.
+    ///
+    /// Mathematical justification for the implementation can be found at
+    /// [Wolfram Research](https://mathworld.wolfram.com/InverseHyperbolicSine.html).
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(1.0, 2.0);
+    /// assert_eq!(z.arcsinh(), Complex::new(1.469351744368185, 1.0634400235777521));
+    /// ```
     pub fn arcsinh(&self) -> Complex {
-        todo!()
+        (*self + (self.squared() + Complex::ONE).sqrt()).ln()
     }
 
     /// Complex inverse hyperbolic cosine.
