@@ -882,8 +882,24 @@ impl Complex {
     }
 
     /// Complex inverse hyperbolic tangent.
-    pub fn arctanh(&self) -> Complex {
-        todo!()
+    ///
+    /// The result here is only valid for `self`.norm() < 1.0. Any other value will yeild
+    /// an Err(DomainError).
+    ///
+    /// Mathematical justification for the implementation can be found at
+    /// [Wolfram Research](https://mathworld.wolfram.com/InverseHyperbolicTangent.html).
+    /// 
+    /// ```
+    /// # use hebrides::{Real, Complex};
+    /// let z = Complex::new(0.5, 0.25);
+    /// assert_eq!(z.arctanh().unwrap(), Complex::new(-0.5003700000525311, -0.31439814320771653));
+    pub fn arctanh(&self) -> Result<Complex, DomainError> {
+        if self.norm() >= Real::ONE {
+            return Err(DomainError);
+        }
+        let num = Complex::ONE - *self;
+        let den = Complex::ONE + *self;
+        Ok(Real::new(0.5).to_complex() * (num / den).ln())
     }
 
     /// Complex natural logarithm.
