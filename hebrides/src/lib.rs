@@ -868,8 +868,17 @@ impl Complex {
     }
 
     /// Complex inverse hyperbolic cosine.
+    /// 
+    /// Mathematical justification for the implementation can be found at 
+    /// [Wolfram Research](https://mathworld.wolfram.com/InverseHyperbolicCosine.html).
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(1.0, 2.0);
+    /// assert_eq!(z.arccosh(), Complex::new(1.528570919480998, 1.1437177404024204));
+    /// ```
     pub fn arccosh(&self) -> Complex {
-        todo!()
+        (*self + (self.squared() - Complex::ONE).sqrt()).ln()
     }
 
     /// Complex inverse hyperbolic tangent.
