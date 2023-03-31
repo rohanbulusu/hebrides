@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"hebrides":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.66.1/core/convert/trait.TryFrom.html\" title=\"trait core::convert::TryFrom\">TryFrom</a>&lt;<a class=\"struct\" href=\"hebrides/struct.Complex.html\" title=\"struct hebrides::Complex\">Complex</a>&gt; for <a class=\"struct\" href=\"hebrides/struct.Real.html\" title=\"struct hebrides::Real\">Real</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
