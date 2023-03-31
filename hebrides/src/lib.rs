@@ -640,7 +640,7 @@ impl Complex {
     /// shortcut for encoding the imaginary unit as Complex::new(Real::ZERO, Real::ONE)
     pub const I: Complex = Complex { real: Real::ZERO, imag: Real::ONE };
 
-    /// Constructs a Complex from two f64 values
+    /// Constructs a Complex from rectangular coordinates
     pub fn new(real: f64, imag: f64) -> Self {
         Self {
             real: Real::new(real),
