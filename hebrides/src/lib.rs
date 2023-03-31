@@ -648,6 +648,15 @@ impl Complex {
         }
     }
 
+    /// Constructs a Complex from complex exponential coordinates
+    pub fn from_polar(r: f64, theta: Angle) -> Self {
+        let as_radians = theta.to_radians();
+        Self {
+            real: Real::new(r*as_radians.cos()),
+            imag: Real::new(r*as_radians.sin())
+        }
+    }
+
     /// Returns whether or not `self` is real.
     ///
     /// ```
