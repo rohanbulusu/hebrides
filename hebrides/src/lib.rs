@@ -693,6 +693,17 @@ impl Complex {
         false
     }
 
+    /// Complex conjugate.
+    ///
+    /// ```
+    /// # use hebrides::Complex;
+    /// let z = Complex::new(2.0, 3.0);
+    /// assert_eq!(z.conjugate(), Complex::new(2.0, -3.0));
+    /// ```
+    pub fn conjugate(&self) -> Complex {
+        Complex::new(self.real.inner, -self.imag.inner)
+    }
+
     /// Absolute value (aka. complex norm).
     ///
     /// ```
