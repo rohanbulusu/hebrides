@@ -1107,6 +1107,36 @@ mod tests {
 
     use super::*;
 
+    mod real {
+
+        use super::*;
+
+        #[test]
+        fn addition() {
+            assert_eq!(Real::ONE + Real::new(2.0), Real::new(3.0));
+            assert_eq!(Real::ONE + Real::new(-1.0), Real::ZERO);
+        }
+
+        #[test]
+        fn subtraction() {
+            assert_eq!(Real::ONE - Real::ONE, Real::ZERO);
+            assert_eq!(Real::new(2.0) - Real::new(3.0), Real::new(-1.0));
+        }
+
+        #[test]
+        fn multiplication() {
+            assert_eq!(Real::new(3.0) * Real::new(2.0), Real::new(6.0));
+            assert_eq!(Real::ONE * Real::new(3.0), Real::new(3.0));
+        }
+
+        #[test]
+        fn division() {
+            assert_eq!(Real::new(3.0) / Real::new(2.0), Real::new(1.5));
+            assert_eq!(Real::new(12.0) / Real::ONE, Real::new(12.0));
+        }
+
+    }
+
     mod complex {
 
         use super::*;
