@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":[["Angle","Representation of angular values."],["Complex","Representation of complex numbers"],["ConversionError","Error type for errors involving conversion between values."],["DomainError","Error type for errors involving domain restrictions."],["Real","Representation of real numbers."]]};
