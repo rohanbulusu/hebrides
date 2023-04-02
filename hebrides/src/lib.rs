@@ -1,8 +1,8 @@
 //! Implementations for real and complex numbers.
 //!
-//! `Hebrides` provides two main structs: Real and Complex, which together
-//! form the basis of the Marlin ecocystem, which as a whole constitutes the
-//! whole of the implementation of DOSs in Rust.
+//! `Hebrides` provides two main structs: Real and Complex. Trigonometry is 
+//! conducted through Angle objects, which are intermediaries between degree
+//! and radian units.
 
 #![deny(rust_2018_idioms, missing_docs)]
 
