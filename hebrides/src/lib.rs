@@ -37,6 +37,7 @@ impl std::fmt::Display for ConversionError {
 ///
 /// Angles are often described in either radians or degrees. This datatype is
 /// a unitless value that allows conversion to either unit system.
+#[derive(Copy, Clone)]
 pub struct Angle {
     radian_form: Option<f64>,
     degree_form: Option<f64>
