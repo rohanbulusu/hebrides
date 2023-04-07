@@ -13,7 +13,7 @@ pub struct Vector<T> {
 	dim: usize
 }
 
-impl<T> Vector<T> where T: Clone{
+impl<T> Vector<T> where T: Clone {
 
 	fn new(components: &[T]) -> Vector<T> {
 		Vector {
@@ -34,6 +34,22 @@ impl<T> PartialEq for Vector<T> where T: PartialEq {
 		}
 		return true;
 	}
+}
+
+impl<T> Add<Self> for Vector<T> where T: Copy + Clone + Add<Output=T> {
+	type Output = Self;
+	fn add(self, other: Self) -> Self {
+		if self.dim != other.dim {
+			panic!("Vectors must be of the same dimension to be summed")
+		}
+		let mut sum = Vec::with_capacity(self.dim);
+		let pairs = self.components.iter().zip(other.components.iter());
+		for pair in pairs {
+			sum.push(*pair.0 + *pair.1)
+		}
+		Vector::new(sum.as_slice())
+	}
+
 }
 
 
@@ -89,6 +105,26 @@ mod test {
 				let a = Vector::new(&[1, 2, 3]);
 				let b = Vector::new(&[1, 2]);
 				assert_ne!(a.dim, b.dim)
+			}
+
+		}
+
+		mod addition {
+
+			use super::*;
+
+			#[test]
+			fn pos_elements() {
+				let a = Vector::new(&[1, 2, 3]);
+				let b = Vector::new(&[4, 5, 6]);
+				assert_eq!(a + b, Vector::new(&[5, 7, 9]))
+			}
+
+			#[test]
+			fn neg_elements() {
+				let a = Vector::new(&[1, 2, 3]);
+				let b = Vector::new(&[-2, -3, -4]);
+				assert_eq!(a + b, Vector::new(&[-1, -1, -1]))
 			}
 
 		}
