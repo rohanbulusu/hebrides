@@ -75,18 +75,20 @@ mod test {
 
 		mod dimension {
 
+			use super::*;
+
 			#[test]
 			fn equal_dimension() {
 				let a = Vector::new(&[1, 2, 3]);
 				let b = Vector::new(&[4, 5, 6]);
-				assert_eq!(a.dim(), b.dim())
+				assert_eq!(a.dim, b.dim)
 			}
 
 			#[test]
 			fn differing_dimension() {
 				let a = Vector::new(&[1, 2, 3]);
 				let b = Vector::new(&[1, 2]);
-				assert_ne!(a.dim(), b.dim())
+				assert_ne!(a.dim, b.dim)
 			}
 
 		}
