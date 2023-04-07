@@ -4,17 +4,21 @@
 //! support a wide array of operations in finite-dimensional space and
 //! form the basis of the linear algebra system for `hebrides`.
 
+use std::ops::Add;
+
 /// Representation of finite-dimensional vectors
 #[derive(Debug)]
 pub struct Vector<T> {
-	components: Vec<T>
+	components: Vec<T>,
+	dim: usize
 }
 
 impl<T> Vector<T> where T: Clone{
 
 	fn new(components: &[T]) -> Vector<T> {
 		Vector {
-			components: components.to_vec()
+			components: components.to_vec(),
+			dim: components.len()
 		}
 	}
 
