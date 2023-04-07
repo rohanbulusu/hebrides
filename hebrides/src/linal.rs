@@ -36,7 +36,7 @@ impl<T> PartialEq for Vector<T> where T: PartialEq {
 	}
 }
 
-impl<T> Add<Self> for Vector<T> where T: Copy + Clone + Add<Output=T> {
+impl<T> Add<Self> for Vector<T> where T: Copy + Add<Output=T> {
 	type Output = Self;
 	fn add(self, other: Self) -> Self {
 		if self.dim != other.dim {
@@ -51,7 +51,7 @@ impl<T> Add<Self> for Vector<T> where T: Copy + Clone + Add<Output=T> {
 	}
 }
 
-impl<T> Sub<Self> for Vector<T> where T: Copy + Clone + Sub<Output=T> {
+impl<T> Sub<Self> for Vector<T> where T: Copy + Sub<Output=T> {
 	type Output = Self;
 	fn sub(self, other: Self) -> Self {
 		if self.dim != other.dim {
