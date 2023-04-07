@@ -4,7 +4,7 @@
 //! support a wide array of operations in finite-dimensional space and
 //! form the basis of the linear algebra system for `hebrides`.
 
-use std::ops::Add;
+use std::ops::{Add, Sub};
 
 /// Representation of finite-dimensional vectors
 #[derive(Debug)]
@@ -45,11 +45,25 @@ impl<T> Add<Self> for Vector<T> where T: Copy + Clone + Add<Output=T> {
 		let mut sum = Vec::with_capacity(self.dim);
 		let pairs = self.components.iter().zip(other.components.iter());
 		for pair in pairs {
-			sum.push(*pair.0 + *pair.1)
+			sum.push(*pair.0 + *pair.1);
 		}
 		Vector::new(sum.as_slice())
 	}
+}
 
+impl<T> Sub<Self> for Vector<T> where T: Copy + Clone + Sub<Output=T> {
+	type Output = Self;
+	fn sub(self, other: Self) -> Self {
+		if self.dim != other.dim {
+			panic!("Vectors must be of the same dimension to be subtracted")
+		}
+		let mut diff = Vec::with_capacity(self.dim);
+		let pairs = self.components.iter().zip(other.components.iter());
+		for pair in pairs {
+			diff.push(*pair.0 - *pair.1);
+		}
+		Vector::new(diff.as_slice())
+	}
 }
 
 
@@ -125,6 +139,26 @@ mod test {
 				let a = Vector::new(&[1, 2, 3]);
 				let b = Vector::new(&[-2, -3, -4]);
 				assert_eq!(a + b, Vector::new(&[-1, -1, -1]))
+			}
+
+		}
+
+		mod subtraction {
+
+			use super::*;
+
+			#[test]
+			fn pos_elements() {
+				let a = Vector::new(&[1, 2, 3]);
+				let b = Vector::new(&[3, 4, 5]);
+				assert_eq!(a - b, Vector::new(&[-2, -2, -2]))
+			}
+
+			#[test]
+			fn neg_elements() {
+				let a = Vector::new(&[1, 2, 3]);
+				let b = Vector::new(&[-1, -2, -3]);
+				assert_eq!(a - b, Vector::new(&[2, 4, 6]))
 			}
 
 		}
