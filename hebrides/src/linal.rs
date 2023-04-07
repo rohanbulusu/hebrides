@@ -4,7 +4,7 @@
 //! support a wide array of operations in finite-dimensional space and
 //! form the basis of the linear algebra system for `hebrides`.
 
-use std::ops::{Add, Sub};
+use std::ops::{Add, Sub, Mul};
 
 /// Representation of finite-dimensional vectors
 #[derive(Debug)]
@@ -63,6 +63,18 @@ impl<T> Sub<Self> for Vector<T> where T: Copy + Clone + Sub<Output=T> {
 			diff.push(*pair.0 - *pair.1);
 		}
 		Vector::new(diff.as_slice())
+	}
+}
+
+/// Implements a dot product between Vectors
+impl<T> Mul<Self> for Vector<T> where T: Copy + Mul<Output=T> + std::iter::Sum {
+	type Output = T;
+	fn mul(self, other: Self) -> T {
+		if self.dim != other.dim {
+			panic!("Dot products can only be taken between vectors of the same dimension")
+		}
+		let pairs = self.components.iter().zip(other.components.iter());
+		pairs.map(|pair| *pair.0 * *pair.1).sum()
 	}
 }
 
@@ -159,6 +171,33 @@ mod test {
 				let a = Vector::new(&[1, 2, 3]);
 				let b = Vector::new(&[-1, -2, -3]);
 				assert_eq!(a - b, Vector::new(&[2, 4, 6]))
+			}
+
+		}
+
+		mod dot_product {
+
+			use super::*;
+
+			#[test]
+			fn pos_elements() {
+				let a = Vector::new(&[1, 2, 3]);
+				let b = Vector::new(&[1, 2, 3]);
+				assert_eq!(a * b, 14)
+			}
+
+			#[test]
+			fn neg_elements() {
+				let a = Vector::new(&[1, 2, 3]);
+				let b = Vector::new(&[-1, -2, -3]);
+				assert_eq!(a * b, -14)
+			}
+
+			#[test]
+			fn orthogonal() {
+				let a = Vector::new(&[1, 0]);
+				let b = Vector::new(&[0, 1]);
+				assert_eq!(a * b, 0);
 			}
 
 		}
