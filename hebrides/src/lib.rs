@@ -5,6 +5,7 @@
 //! linear algebra systems.
 
 #![deny(rust_2018_idioms, missing_docs)]
+#![allow(non_snake_case)]
 
 mod elem;
 mod linal;
