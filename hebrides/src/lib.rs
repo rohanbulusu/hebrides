@@ -6,8 +6,8 @@
 
 #![deny(rust_2018_idioms, missing_docs)]
 
-mod elem;
-mod linal;
+pub mod elem;
+pub mod linal;
 
 pub use elem::*;
 pub use linal::*;
