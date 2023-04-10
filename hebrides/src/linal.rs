@@ -90,8 +90,95 @@ impl<T> Div<T> for Vector<T> where T: Copy + Div<Output=T> {
 	}
 }
 
-/// TODO!
-pub struct Matrix;
+/// Helper struct carrying the dimensions of a [`Matrix`].
+struct MatrixDimensions {
+	num_rows: usize,
+	num_cols: usize
+}
+
+impl MatrixDimensions {
+
+	/// Constructs a new [`MatrixDimensions`] from a pair of usizes.
+	pub fn new(num_rows: usize, num_cols: usize) -> MatrixDimensions {
+		Self { num_rows, num_cols }
+	}
+
+}
+
+/// Implementation for a finite-dimensional matrix over T.
+pub struct Matrix<T> {
+	rows: Vec<Vec<T>>,
+	dims: MatrixDimensions
+}
+
+impl<T> Matrix<T> {
+
+	/// Returns whether or not all containers within the provided [`Vec`] have
+	/// equal length.
+	fn have_equal_length(rows: &Vec<Vec<T>>) -> bool {
+		rows.iter().all(|row| row.len() == rows[0].len())
+	}
+
+	/// Constructs a new [`Matrix`] from a nested [`Vec`].
+	///
+	/// # Panics
+	/// This constructor panics in two scenarios. If the provided `Vec` has no 
+	/// elements, as depicted below,
+	///
+	/// ```should_panic
+	/// # use hebrides::linal::Matrix;
+	/// let _: Matrix<i32> = Matrix::new(vec![]); // panics!
+	/// ```
+	///
+	/// then a Matrix cannot be constructed and a panic issues. If the provided
+	/// `Vec` has rows of differing length, then it is similarly impossible to 
+	/// determine the appropriate dimension of the Matrix desired and there is a
+	/// panic.
+	/// 
+	/// ```should_panic
+	/// # use hebrides::linal::Matrix;
+	/// let _ = Matrix::new(vec![vec![1, 0], vec![0]]); // panics!
+	/// ```
+	pub fn new(rows: Vec<Vec<T>>) -> Matrix<T> {
+		if rows.len() == 0 {
+			panic!("Matrix must be non-empty")
+		}
+		if !Matrix::have_equal_length(&rows) {
+			panic!("All rows of a Matrix must have equal length")
+		}
+		let dims = MatrixDimensions::new(rows.len(), rows[0].len());
+		Self { rows, dims }
+	}
+
+}
+
+impl<T> Add<Self> for Matrix<T> {
+	type Output = Self;
+	fn add(mut self, other: Self) -> Self {
+		todo!()
+	}
+}
+
+impl<T> Sub<Self> for Matrix<T> {
+	type Output = Self;
+	fn sub(mut self, other: Self) -> Self {
+		todo!()
+	}
+}
+
+impl<T> Mul<Self> for Matrix<T> {
+	type Output = Self;
+	fn mul(mut self, other: Self) -> Self {
+		todo!()
+	}
+}
+
+impl<T> Div<T> for Matrix<T> {
+	type Output = Self;
+	fn div(mut self, other: T) -> Self {
+		todo!()
+	}
+}
 
 
 #[cfg(test)]
