@@ -1,144 +1,97 @@
 //! Implementations for linear algebra.
 //!
-//! `linal` provides two main structs: Vector and Matrix. These together
+//! `linal` provides two main structs: [`Vector`] and [`Matrix`]. These together
 //! support a wide array of operations in finite-dimensional space and
 //! form the basis of the linear algebra system for `hebrides`.
 
 use std::ops::{Add, Sub, Mul, Div};
 
-/// Representation of finite-dimensional vectors
+/// Implementation for a finite-dimensional vector over T.
 #[derive(Debug)]
 pub struct Vector<T> {
 	components: Vec<T>,
 	dim: usize
 }
 
-impl<T> Vector<T> where T: Clone {
+impl<T> Vector<T> {
 
-	/// Constructs a `Vector` from a slice
-	pub fn new(components: &[T]) -> Vector<T> {
-		Vector {
-			components: components.to_vec(),
-			dim: components.len()
-		}
+	/// Constructs a [`Vector`] from a slice.
+	pub fn new(components: Vec<T>) -> Vector<T> {
+		let dim = components.len();
+		Self { components, dim }
+	}
+
+	/// Returns whether or not `a` and `b` are of the same dimension.
+	pub fn same_dim(a: &Self, b: &Self) -> bool {
+		a.dim == b.dim
 	}
 
 }
 
 impl<T> PartialEq for Vector<T> where T: PartialEq {
-	fn eq(&self, other: &Vector<T>) -> bool {
-		let pairs = self.components.iter().zip(other.components.iter());
-		for pair in pairs {
-			if pair.0 != pair.1 {
-				return false;
-			}
+	fn eq(&self, other: &Self) -> bool {
+		if !Vector::same_dim(self, other) {
+			return false;
 		}
-		return true;
+		self.components.iter()
+					   .zip(other.components.iter())
+					   .all(|pair| *pair.0 == *pair.1)
 	}
 }
 
 impl<T> Add<Self> for Vector<T> where T: Copy + Add<Output=T> {
 	type Output = Self;
-	fn add(self, other: Self) -> Self {
-		if self.dim != other.dim {
-			panic!("Vectors must be of the same dimension to be summed")
+	fn add(mut self, other: Self) -> Self {
+		if !Vector::same_dim(&self, &other) {
+			panic!("Sums can only be taken between Vectors of the same dimension")
 		}
-		let mut sum = Vec::with_capacity(self.dim);
-		let pairs = self.components.iter().zip(other.components.iter());
-		for pair in pairs {
-			sum.push(*pair.0 + *pair.1);
+		for (i, component) in other.components.iter().enumerate() {
+			self.components[i] = self.components[i] + *component;
 		}
-		Vector::new(sum.as_slice())
+		self
 	}
 }
 
 impl<T> Sub<Self> for Vector<T> where T: Copy + Sub<Output=T> {
 	type Output = Self;
-	fn sub(self, other: Self) -> Self {
-		if self.dim != other.dim {
-			panic!("Vectors must be of the same dimension to be subtracted")
+	fn sub(mut self, other: Self) -> Self {
+		if !Vector::same_dim(&self, &other) {
+			panic!("Differences can only be taken between Vectors of the same dimension")
 		}
-		let mut diff = Vec::with_capacity(self.dim);
-		let pairs = self.components.iter().zip(other.components.iter());
-		for pair in pairs {
-			diff.push(*pair.0 - *pair.1);
+		for (i, component) in other.components.iter().enumerate() {
+			self.components[i] = self.components[i] - *component;
 		}
-		Vector::new(diff.as_slice())
+		self
 	}
 }
 
-/// Implements a dot product between Vectors
-impl<T> Mul<Self> for Vector<T> where T: Copy + Mul<Output=T> + std::iter::Sum {
+/// Implements a dot product.
+impl<T> Mul<Self> for Vector<T> where T: Copy + Mul<Output=T> + Add<Output=T> {
 	type Output = T;
 	fn mul(self, other: Self) -> T {
-		if self.dim != other.dim {
-			panic!("Dot products can only be taken between vectors of the same dimension")
+		if !Vector::same_dim(&self, &other) {
+			panic!("Dot product can only be taken between Vectors of the same dimension")
 		}
-		let pairs = self.components.iter().zip(other.components.iter());
-		pairs.map(|pair| *pair.0 * *pair.1).sum()
+		self.components.iter()
+					   .zip(other.components.iter())
+					   .map(|pair| *pair.0 * *pair.1)
+					   .reduce(|acc, component| acc + component)
+					   .unwrap()
 	}
 }
 
 impl<T> Div<T> for Vector<T> where T: Copy + Div<Output=T> {
 	type Output = Self;
-	fn div(self, other: T) -> Self {
-		let mut dividend = Vec::with_capacity(self.dim);
-		for component in self.components {
-			dividend.push(component / other);
+	fn div(mut self, other: T) -> Self {
+		for i in 0..self.dim {
+			self.components[i] = self.components[i] / other;
 		}
-		Vector::new(dividend.as_slice())
+		self
 	}
 }
 
-fn all_rows_have_equal_length<'a, T>(array: &'a[&'a[T]]) -> bool {
-	let first_row_length = array[0].len();
-	for row in array {
-		if row.len() != first_row_length {
-			return false;
-		}
-	}
-	true
-}
-
-
-/// Container for the dimensions of a `Matrix`
-struct MatrixDimensions {
-	rows: usize,
-	cols: usize
-}
-
-impl MatrixDimensions {
-
-	fn new(num_rows: usize, num_cols: usize) -> MatrixDimensions {
-		Self {
-			rows: num_rows,
-			cols: num_cols
-		}
-	}
-
-}
-
-/// Representation of finite-dimensional matrices
-pub struct Matrix<'a, T> {
-	rows: &'a[&'a[T]],
-	dims: MatrixDimensions
-}
-
-impl<'a, T> Matrix<'a, T> where T: Clone {
-
-	/// Constructs a `Matrix` from nested slices
-	pub fn new(components: &'a [&'a [T]]) -> Matrix<'a, T> {
-		if !all_rows_have_equal_length(components) {
-			panic!("Expected all rows of Matrix to have equal length")
-		}
-		Self {
-			rows: components,
-			dims: MatrixDimensions::new(components.len(), components[0].len())		}
-	}
-
-}
-
-
+/// TODO!
+pub struct Matrix;
 
 
 #[cfg(test)]
@@ -146,74 +99,33 @@ mod test {
 
 	use super::*;
 
-	mod vector {
+	mod vec {
 
 		use super::*;
-
-		mod equality {
-
-			use super::*;
-
-			#[test]
-			fn equality() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[1, 2, 3]);
-				assert_eq!(a, b)
-			}
-
-			#[test]
-			fn normal_inequality() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[4, 5, 6]);
-				assert_ne!(a, b)
-			}
-
-			#[test]
-			fn mixed_inequality() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[3, 2, 1]);
-				assert_ne!(a, b)
-			}
-
-		}
-
-		mod dimension {
-
-			use super::*;
-
-			#[test]
-			fn equal_dimension() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[4, 5, 6]);
-				assert_eq!(a.dim, b.dim)
-			}
-
-			#[test]
-			fn differing_dimension() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[1, 2]);
-				assert_ne!(a.dim, b.dim)
-			}
-
-		}
 
 		mod addition {
 
 			use super::*;
 
 			#[test]
-			fn normal() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[4, 5, 6]);
-				assert_eq!(a + b, Vector::new(&[5, 7, 9]))
+			fn left_identity() {
+				let zero = Vector::new(vec![0, 0, 0]);
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(zero + a, Vector::new(vec![1, 2, 3]))
 			}
 
 			#[test]
-			#[should_panic]
-			fn differing_dims() {
-				let a = Vector::new(&[1]);
-				let b = Vector::new(&[1, 2]);
-				let _ = a + b;
+			fn right_identity() {
+				let zero = Vector::new(vec![0, 0, 0]);
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(a + zero, Vector::new(vec![1, 2, 3]))
+			}
+
+			#[test]
+			fn standard() {
+				let a = Vector::new(vec![1, 2, 3]);
+				let b = Vector::new(vec![4, 5, 6]);
+				assert_eq!(a + b, Vector::new(vec![5, 7, 9]))
 			}
 
 		}
@@ -223,18 +135,24 @@ mod test {
 			use super::*;
 
 			#[test]
-			fn normal() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[3, 4, 5]);
-				assert_eq!(a - b, Vector::new(&[-2, -2, -2]))
+			fn left_identity() {
+				let zero = Vector::new(vec![0; 3]);
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(zero - a, Vector::new(vec![-1, -2, -3]))
 			}
 
 			#[test]
-			#[should_panic]
-			fn differing_dims() {
-				let a = Vector::new(&[1]);
-				let b = Vector::new(&[1, 2]);
-				let _ = a - b;
+			fn right_identity() {
+				let zero = Vector::new(vec![0; 3]);
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(a - zero, Vector::new(vec![1, 2, 3]))
+			}
+
+			#[test]
+			fn standard() {
+				let a = Vector::new(vec![1, 2, 3]);
+				let b = Vector::new(vec![4, 5, 6]);
+				assert_eq!(a - b, Vector::new(vec![-3, -3, -3]))
 			}
 
 		}
@@ -244,25 +162,38 @@ mod test {
 			use super::*;
 
 			#[test]
-			fn normal() {
-				let a = Vector::new(&[1, 2, 3]);
-				let b = Vector::new(&[1, 2, 3]);
+			fn left_identity() {
+				let zero = Vector::new(vec![0; 3]);
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(zero * a, 0)
+			}
+
+			#[test]
+			fn right_identity() {
+				let zero = Vector::new(vec![0; 3]);
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(a * zero, 0)
+			}
+
+			#[test]
+			fn square() {
+				let a = Vector::new(vec![1, 2, 3]);
+				let b = Vector::new(vec![1, 2, 3]);
 				assert_eq!(a * b, 14)
 			}
 
 			#[test]
 			fn orthogonal() {
-				let a = Vector::new(&[1, 0]);
-				let b = Vector::new(&[0, 1]);
-				assert_eq!(a * b, 0);
+				let k_hat = Vector::new(vec![0, 0, 1]);
+				let j_hat = Vector::new(vec![0, 1, 0]);
+				assert_eq!(k_hat * j_hat, 0)
 			}
 
 			#[test]
-			#[should_panic]
-			fn differing_dims() {
-				let a = Vector::new(&[1]);
-				let b = Vector::new(&[1, 2]);
-				let _ = a * b;
+			fn standard() {
+				let a = Vector::new(vec![1, 2, 3]);
+				let b = Vector::new(vec![4, 5, 6]);
+				assert_eq!(a * b, 32)
 			}
 
 		}
@@ -272,62 +203,28 @@ mod test {
 			use super::*;
 
 			#[test]
-			fn normal() {
-				let a = Vector::new(&[2, 4, 6]);
-				assert_eq!(a / 2, Vector::new(&[1, 2, 3]))
+			#[should_panic]
+			fn divide_by_zero_error() {
+				let a = Vector::new(vec![1, 2, 3]);
+				let _ = a / 0;
 			}
 
 			#[test]
-			#[should_panic]
-			fn zero_divisor() {
-				let b = Vector::new(&[2, 3, 4]);
-				let _ = b / 0;
+			fn identity() {
+				let a = Vector::new(vec![1, 2, 3]);
+				assert_eq!(a / 1, Vector::new(vec![1, 2, 3]))
+			}
+
+			#[test]
+			fn standard() {
+				let a = Vector::new(vec![2, 4, 6]);
+				assert_eq!(a / 2, Vector::new(vec![1, 2, 3]))
 			}
 
 		}
 
 	}
 
-	mod matrix {
-
-		use super::*;
-
-		mod dimensionality {
-
-			use super::*;
-
-			#[test]
-			#[should_panic]
-			fn incompatible_array() {
-				let _ = Matrix::new(&[
-					&[1, 2, 3],
-					&[1, 2]
-				]);
-			}
-
-			#[test]
-			fn num_rows() {
-				let m = Matrix::new(&[
-					&[1, 2, 3],
-					&[1, 2, 3]
-				]);
-				assert_eq!(m.dims.rows, 2)
-			}
-
-			#[test]
-			fn num_cols() {
-				let m = Matrix::new(&[
-					&[1, 2, 3],
-					&[1, 2, 3]
-				]);
-				assert_eq!(m.dims.cols, 3)
-			}
-
-		}
-
-	}
+	
 
 }
-
-
-
