@@ -91,6 +91,7 @@ impl<T> Div<T> for Vector<T> where T: Copy + Div<Output=T> {
 }
 
 /// Helper struct carrying the dimensions of a [`Matrix`].
+#[derive(Copy, Clone)]
 struct MatrixDimensions {
 	num_rows: usize,
 	num_cols: usize
@@ -103,11 +104,18 @@ impl MatrixDimensions {
 		Self { num_rows, num_cols }
 	}
 
+	/// Returns whether or not `a` and `b` have a product defined by the standard
+	/// methods of matrix multiplication (ie. whether or not a * b exists).
+	pub fn are_compatible(a: MatrixDimensions, b: MatrixDimensions) -> bool {
+		a.num_cols == b.num_rows
+	}
+
 }
 
 /// Implementation for a finite-dimensional matrix over T.
 pub struct Matrix<T> {
 	rows: Vec<Vec<T>>,
+	cols: Vec<Vec<T>>,
 	dims: MatrixDimensions
 }
 
@@ -117,6 +125,24 @@ impl<T> Matrix<T> {
 	/// equal length.
 	fn have_equal_length(rows: &Vec<Vec<T>>) -> bool {
 		rows.iter().all(|row| row.len() == rows[0].len())
+	}
+
+}
+
+impl<T> Matrix<T> where T: Copy {
+
+	/// Takes a [`Vec`] describing a matrix in rows and returns a [`Vec`]
+	/// describing the same matrix in terms of columns.
+	fn to_columns(rows: &Vec<Vec<T>>) -> Vec<Vec<T>> {
+		let mut cols: Vec<Vec<T>> = vec![];
+		for i in 0..rows[0].len() {
+			let mut col: Vec<T> = vec![];
+			for j in 0..rows.len() {
+				col.push(rows[j][i])
+			}
+			cols.push(col);
+		}
+		cols
 	}
 
 	/// Constructs a new [`Matrix`] from a nested [`Vec`].
@@ -146,47 +172,139 @@ impl<T> Matrix<T> {
 		if !Matrix::have_equal_length(&rows) {
 			panic!("All rows of a Matrix must have equal length")
 		}
+		let cols = Matrix::to_columns(&rows);
 		let dims = MatrixDimensions::new(rows.len(), rows[0].len());
-		Self { rows, dims }
+		Self { rows, cols, dims }
 	}
 
 }
 
-impl<T> Add<Self> for Matrix<T> {
+impl<T> std::fmt::Debug for Matrix<T> where T: std::fmt::Display {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+		let mut repr = "[".to_owned();
+		for (i, row) in self.rows.iter().enumerate() {
+			let mut row_repr = "[".to_owned();
+			for (j, component) in row.iter().enumerate() {
+				if j == row.len() - 1 {
+					row_repr.push_str(&format!("{}", component));
+					continue;
+				}
+				row_repr.push_str(&format!("{}, ", component));
+			}
+			if i == self.rows.len() - 1 {
+				row_repr.push_str("]");
+				repr.push_str(&row_repr);
+				continue;
+			}
+			row_repr.push_str("], ");
+			repr.push_str(&row_repr);
+		}
+		write!(f, "{}]", repr)
+	}
+}
+
+impl<T> PartialEq for Matrix<T> where T: PartialEq {
+	fn eq(&self, other: &Self) -> bool {
+		self.rows.iter()
+				 .zip(other.rows.iter())
+				 .map(|pair| *pair.0 == *pair.1)
+				 .all(|e| e)
+	}
+}
+
+impl<T> Add<Self> for Matrix<T> where T: Copy + Add<Output=T> {
 	type Output = Self;
 	fn add(mut self, other: Self) -> Self {
-		todo!()
+		for (i, row) in other.rows.iter().enumerate() {
+			for (j, component) in row.iter().enumerate() {
+				self.rows[i][j] = self.rows[i][j] + *component;
+			}
+		}
+		self
 	}
 }
 
-impl<T> Sub<Self> for Matrix<T> {
+impl<T> Sub<Self> for Matrix<T> where T: Copy + Sub<Output=T> {
 	type Output = Self;
 	fn sub(mut self, other: Self) -> Self {
-		todo!()
+		for (i, row) in other.rows.iter().enumerate() {
+			for (j, component) in row.iter().enumerate() {
+				self.rows[i][j] = self.rows[i][j] - *component;
+			}
+		}
+		self
 	}
 }
 
-impl<T> Mul<Self> for Matrix<T> {
+fn into_chunks<T>(v: Vec<T>, n: usize) -> Vec<Vec<T>> where T: Copy {
+	if v.len() % n != 0 {
+		panic!("Provided Vec cannot be evenly distributed into chunks of size {}", n)
+	}
+	let mut counter: usize = 0;
+	let mut chunks: Vec<Vec<T>> = Vec::with_capacity(v.len());
+	let mut cur_chunk: Vec<T> = Vec::with_capacity(n);
+	for item in v {
+		cur_chunk.push(item);
+		counter += 1;
+		if counter == n {
+			counter = 0;
+			chunks.push(cur_chunk.to_vec());
+			cur_chunk.clear();
+			continue;
+		}
+		
+	}
+	chunks
+}
+
+impl<T> Mul<Self> for Matrix<T> where T: Copy + Default + Mul<Output=T> + Add<Output=T> {
 	type Output = Self;
-	fn mul(mut self, other: Self) -> Self {
-		todo!()
+	fn mul(self, other: Self) -> Self {
+		if !MatrixDimensions::are_compatible(self.dims, other.dims) {
+			panic!("Matrices must have compatible dimensions to be multiplied")
+		}
+		let mut product: Vec<T> = Vec::with_capacity(self.dims.num_rows*other.dims.num_cols);
+		for _ in 0..self.dims.num_rows*other.dims.num_cols {
+			product.push(T::default());
+		}
+		for i in 0..self.dims.num_rows {
+			for j in 0..other.dims.num_cols {
+				for k in 0..other.dims.num_rows {
+					let index = j + other.dims.num_cols*i;
+					product[index] = product[index] + self.rows[i][k] * other.rows[k][j];
+				}
+			}
+		}
+		Matrix::new(into_chunks(product, other.dims.num_cols))
 	}
 }
 
-impl<T> Div<T> for Matrix<T> {
+impl<T> Mul<T> for Matrix<T> where T: Copy + Mul<Output=T> {
+	type Output = Self;
+	fn mul(self, other: T) -> Self {
+		let new_rows: Vec<Vec<T>> = self.rows.iter()
+											 .map(|row| row.iter().map(|e| other**e).collect())
+											 .collect();
+		Matrix::new(new_rows)
+	}
+}
+
+impl<T> Div<T> for Matrix<T> where T: Copy + Div<Output=T> {
 	type Output = Self;
 	fn div(mut self, other: T) -> Self {
-		todo!()
+		let new_rows: Vec<Vec<T>> = self.rows.iter()
+											 .map(|row| row.iter().map(|e| *e / other).collect())
+											 .collect();
+		Matrix::new(new_rows)
 	}
 }
-
 
 #[cfg(test)]
 mod test {
 
 	use super::*;
 
-	mod vec {
+	mod vector {
 
 		use super::*;
 
@@ -312,6 +430,286 @@ mod test {
 
 	}
 
+	mod matrix {
+
+		use super::*;
+
+		#[test]
+		fn rows_to_columns_works() {
+			let m = Matrix::new(vec![
+				vec![1, 2],
+				vec![3, 4]
+			]);
+			let cols = vec![
+				vec![1, 3],
+				vec![2, 4]
+			];
+			assert_eq!(cols, m.cols)
+		}
+
+		#[test]
+		fn equality_holds() {
+			let p = Matrix::new(vec![
+				vec![1, 2],
+				vec![3, 4]
+			]);
+			let q = Matrix::new(vec![
+				vec![1, 2],
+				vec![3, 4]
+			]);
+			assert!(p == q)
+		}
+
+		#[test]
+		fn inequality_holds() {
+			let p = Matrix::new(vec![
+				vec![-1, 2],
+				vec![3, 4]
+			]);
+			let q = Matrix::new(vec![
+				vec![1, 2],
+				vec![3, 4]
+			]);
+			assert!(p != q)
+		}
+
+		mod addition {
+
+			use super::*;
+
+			#[test]
+			fn left_identity() {
+				let zero = Matrix::new(vec![
+					vec![0, 0],
+					vec![0, 0]
+				]);
+				let m = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_sum = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				assert_eq!(zero + m, expected_sum)
+			}
+
+			#[test]
+			fn right_identity() {
+				let zero = Matrix::new(vec![
+					vec![0, 0],
+					vec![0, 0]
+				]);
+				let m = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_sum = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				assert_eq!(m + zero, expected_sum)
+			}
+
+			#[test]
+			fn standard() {
+				let p = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let q = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_sum = Matrix::new(vec![
+					vec![2, 4],
+					vec![6, 8]
+				]);
+				assert_eq!(p + q, expected_sum)
+			}
+
+		}
+
+		mod subtraction {
+
+			use super::*;
+
+			#[test]
+			fn left_identity() {
+				let zero = Matrix::new(vec![
+					vec![0, 0],
+					vec![0, 0]
+				]);
+				let m = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_difference = Matrix::new(vec![
+					vec![-1, -2],
+					vec![-3, -4]
+				]);
+				assert_eq!(zero - m, expected_difference)
+			}
+
+			#[test]
+			fn right_identity() {
+				let zero = Matrix::new(vec![
+					vec![0, 0],
+					vec![0, 0]
+				]);
+				let m = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_difference = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				assert_eq!(m - zero, expected_difference)
+			}
+
+			#[test]
+			fn standard() {
+				let p = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let q = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_difference = Matrix::new(vec![
+					vec![0, 0],
+					vec![0, 0]
+				]);
+				assert_eq!(p - q, expected_difference)
+			}
+
+		}
+
+		mod matrix_multiplication {
+
+			use super::*;
+
+			#[test]
+			fn left_identity() {
+				let one = Matrix::new(vec![
+					vec![1, 0],
+					vec![0, 1]
+				]);
+				let a = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_product = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				assert_eq!(one * a, expected_product)
+			}
+
+			#[test]
+			fn right_identity() {
+				let one = Matrix::new(vec![
+					vec![1, 0],
+					vec![0, 1]
+				]);
+				let a = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let expected_product = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				assert_eq!(a * one, expected_product)
+			}
+
+			#[test]
+			fn standard() {
+				let a = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				let b = Matrix::new(vec![
+					vec![10, 11],
+					vec![20, 21],
+					vec![30, 31]
+				]);
+				let expected_product = Matrix::new(vec![
+					vec![140, 146],
+					vec![320, 335]
+				]);
+				assert_eq!(a * b, expected_product)
+			}
+
+		}
+
+		mod scalar_multiplication {
+
+			use super::*;
+
+			#[test]
+			fn right_identity() {
+				let a = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				let expected_product = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				assert_eq!(a * 1, expected_product)
+			}
+
+			#[test]
+			fn right_standard() {
+				let a = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				let expected_product = Matrix::new(vec![
+					vec![4, 8, 12],
+					vec![16, 20, 24]
+				]);
+				assert_eq!(a * 4, expected_product)
+			}
+
+		}
+
+		mod scalar_division {
+
+			use super::*;
+
+			#[test]
+			fn right_identity() {
+				let a = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				let expected_product = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				assert_eq!(a / 1, expected_product)
+			}
+
+			#[test]
+			fn right_standard() {
+				let a = Matrix::new(vec![
+					vec![4, 8, 12],
+					vec![16, 20, 24]
+				]);
+				let expected_dividend = Matrix::new(vec![
+					vec![1, 2, 3],
+					vec![4, 5, 6]
+				]);
+				assert_eq!(a / 4, expected_dividend)
+			}
+
+		}
+
+	}
 	
 
 }
