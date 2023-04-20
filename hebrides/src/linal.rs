@@ -4,7 +4,7 @@
 //! support a wide array of operations in finite-dimensional space and
 //! form the basis of the linear algebra system for `hebrides`.
 
-use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{Add, Sub, Mul, Div, Neg, Index};
 
 /// Implementation for a finite-dimensional vector over T.
 #[derive(Debug)]
@@ -18,6 +18,9 @@ impl<T> Vector<T> {
 	/// Constructs a [`Vector`] from a slice.
 	pub fn new(components: Vec<T>) -> Vector<T> {
 		let dim = components.len();
+		if dim == 0 {
+			panic!("Must provide at least one component to Vector")
+		}
 		Self { components, dim }
 	}
 
@@ -26,6 +29,92 @@ impl<T> Vector<T> {
 		a.dim == b.dim
 	}
 
+}
+
+impl<T> Vector<T> where T: Copy + Mul<Output=T> + Add<Output=T> + Default {
+
+	/// Implements a dot product.
+	///
+	/// This method differs from the implementation offered by Mul<Vector<T>> in that
+	/// it provides for both arguments being borrowed so that ownership of the
+	/// [`Vector`]s involved does not have to be given up to get their product.
+	pub fn dot(&self, other: &Self) -> T {
+		if self.dim != other.dim {
+			panic!("Vectors must be of the same dimension to have their dot product taken")
+		}
+		let mut sum = self.components[0] * other.components[0];
+		for (i, (a, b)) in self.components.iter().zip(other.components.iter()).enumerate() {
+			if i == 0 {
+				continue;
+			}
+			sum = sum + *a * *b;
+		}
+		sum
+	}
+
+}
+
+impl<T> Vector<T> where T: Copy + Mul<Output=T> + Sub<Output=T> {
+
+	/// Returns the cross product of `self` with `other`.
+	pub fn cross(&self, other: &Self) -> Self {
+		if self.dim != other.dim {
+			panic!("Vectors must be of the same dimension to be crossed")
+		}
+		if self.dim != 3 {
+			panic!("Vectors must be three-dimensional to have valid cross products")
+		}
+		let x = self.components[1]*other.components[2] - self.components[2]*other.components[1];
+		let y = self.components[2]*other.components[0] - self.components[0]*other.components[2];
+		let z = self.components[0]*other.components[1] - self.components[1]*other.components[0];
+		Vector::new(vec![x, y, z])
+	}
+
+}
+
+impl<T> Vector<T> where T: Copy + Add<Output=T> + std::iter::Sum<T> {
+
+	/// Returns the squared norm of `self`.
+	pub fn square_norm(&self) -> T {
+		self.components.iter().map(|e| *e).sum::<T>()
+	}
+
+}
+
+impl Vector<f32> {
+
+	/// Returns the norm of `self`.
+	pub fn norm(&self) -> f32 {
+		self.square_norm().powf(0.5)
+	}
+
+	/// Normalized version of `self`.
+	pub fn normalized(&self) -> Self {
+		let norm = self.norm();
+		Vector::new(self.components.iter().map(|e| *e / norm).collect())
+	}
+
+}
+
+impl Vector<f64> {
+
+	/// Returns the norm of `self`.
+	pub fn norm(&self) -> f64 {
+		self.square_norm().powf(0.5)
+	}
+
+	/// Normalized version of `self`.
+	pub fn normalized(&self) -> Self {
+		let norm = self.norm();
+		Vector::new(self.components.iter().map(|e| *e / norm).collect())
+	}
+
+}
+
+impl<T> Clone for Vector<T> where T: Clone {
+	fn clone(&self) -> Vector<T> {
+		Vector::new(self.components.to_vec())
+	}
 }
 
 impl<T> PartialEq for Vector<T> where T: PartialEq {
@@ -38,6 +127,13 @@ impl<T> PartialEq for Vector<T> where T: PartialEq {
 					   .all(|pair| *pair.0 == *pair.1)
 	}
 }
+
+impl<T> Index<usize> for Vector<T> {
+	type Output = T;
+	fn index(&self, index: usize) -> &T {
+		&self.components[index]
+	}
+} 
 
 impl<T> Add<Self> for Vector<T> where T: Copy + Add<Output=T> {
 	type Output = Self;
@@ -69,14 +165,17 @@ impl<T> Sub<Self> for Vector<T> where T: Copy + Sub<Output=T> {
 impl<T> Mul<Self> for Vector<T> where T: Copy + Mul<Output=T> + Add<Output=T> {
 	type Output = T;
 	fn mul(self, other: Self) -> T {
-		if !Vector::same_dim(&self, &other) {
-			panic!("Dot product can only be taken between Vectors of the same dimension")
+		if self.dim != other.dim {
+			panic!("Vectors must be of the same dimension to have their dot product taken")
 		}
-		self.components.iter()
-					   .zip(other.components.iter())
-					   .map(|pair| *pair.0 * *pair.1)
-					   .reduce(|acc, component| acc + component)
-					   .unwrap()
+		let mut sum = self.components[0] * other.components[0];
+		for (i, (a, b)) in self.components.iter().zip(other.components.iter()).enumerate() {
+			if i == 0 {
+				continue;
+			}
+			sum = sum + *a * *b;
+		}
+		sum
 	}
 }
 
@@ -87,6 +186,17 @@ impl<T> Div<T> for Vector<T> where T: Copy + Div<Output=T> {
 			self.components[i] = self.components[i] / other;
 		}
 		self
+	}
+}
+
+impl<T> Neg for Vector<T> where T: Copy + Neg<Output=T> {
+	type Output = Self;
+	fn neg(self) -> Self {
+		let mut new_components = Vec::with_capacity(self.dim);
+		for e in self.components {
+			new_components.push(-e);
+		}
+		Vector::new(new_components)
 	}
 }
 
@@ -179,6 +289,39 @@ impl<T> Matrix<T> where T: Copy {
 
 }
 
+/// Matrix type specifying a Matrix of [`f32`]s.
+pub type Matrix32 = Matrix<f32>;
+
+impl Matrix32{
+
+	/// Creates a homogenous transformation matrix that will cause a vector to point at 
+	/// `dir`, using `up` for orientation.
+	pub fn look_at_rh(eye: Vector<f32>, dir: Vector<f32>, up: Vector<f32>) -> Matrix32 {
+		let f = dir.normalized();
+		let s = f.cross(&up).normalized();
+		let u = s.cross(&f);
+
+		Matrix::new(vec![
+			vec![s[0], u[0], -f[0], 0.0],
+			vec![s[1], u[1], -f[1], 0.0],
+			vec![s[2], u[2], -f[2], 0.0],
+			vec![-eye.dot(&s), -eye.dot(&u), eye.dot(&f), 0.0]
+		])
+	}
+
+	/// Creates a perspective matrix from the given parameters.
+	pub fn perspective(fovy: f32, aspect: f32, znear: f32, zfar: f32) -> Matrix32 {
+		let f = 1.0 / (fovy / 2.0).tan();
+		Matrix::new(vec![
+			vec![f / aspect, 0.0, 0.0, 0.0],
+			vec![0.0, f, 0.0, 0.0],
+			vec![0.0, 0.0, (zfar + znear) / (znear - zfar), 2.0*zfar*znear / (znear - zfar)],
+			vec![0.0, 0.0, -1.0, 0.0]
+		])
+	}
+
+}
+
 impl<T> std::fmt::Debug for Matrix<T> where T: std::fmt::Display {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
 		let mut repr = "[".to_owned();
@@ -211,6 +354,14 @@ impl<T> PartialEq for Matrix<T> where T: PartialEq {
 				 .all(|e| e)
 	}
 }
+
+impl<T> Index<usize> for Matrix<T> where T: Clone {
+	type Output = Vec<T>;
+	fn index(&self, index: usize) -> &Vec<T> {
+		&self.rows[index]
+	}
+} 
+
 
 impl<T> Add<Self> for Matrix<T> where T: Copy + Add<Output=T> {
 	type Output = Self;
@@ -291,7 +442,7 @@ impl<T> Mul<T> for Matrix<T> where T: Copy + Mul<Output=T> {
 
 impl<T> Div<T> for Matrix<T> where T: Copy + Div<Output=T> {
 	type Output = Self;
-	fn div(mut self, other: T) -> Self {
+	fn div(self, other: T) -> Self {
 		let new_rows: Vec<Vec<T>> = self.rows.iter()
 											 .map(|row| row.iter().map(|e| *e / other).collect())
 											 .collect();
