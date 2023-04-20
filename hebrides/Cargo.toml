@@ -1,6 +1,6 @@
 [package]
 name = "hebrides"
-version = "0.1.42"
+version = "0.1.43"
 edition = "2021"
 description = "Implementations for the real numbers, complex numbers, and basic linear algebra"
 repository = "https://github.com/rohanbulusu/hebrides"
