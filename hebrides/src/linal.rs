@@ -430,6 +430,27 @@ impl<T> Mul<Self> for Matrix<T> where T: Copy + Default + Mul<Output=T> + Add<Ou
 	}
 }
 
+impl<T> Mul<Vector<T>> for Matrix<T> where T: Copy + Default + Mul<Output=T> + Add<Output=T> {
+	type Output = Vector<T>;
+	fn mul(self, other: Vector<T>) -> Vector<T> {
+		if self.dims.num_cols != other.dim {
+			panic!("Vector must be compatible with matrix to be transformed by it")
+		}
+		let mut result_components = Vec::with_capacity(self.dims.num_rows);
+		for row in self.rows {
+			let mut sum = row[0] * other[0];
+			for (i, (a, b)) in row.iter().zip(other.components.iter()).enumerate() {
+				if i == 0 {
+					continue;
+				}
+				sum = sum + *a * *b
+			}
+			result_components.push(sum);
+		}
+		Vector::new(result_components)
+	}
+}
+
 impl<T> Mul<T> for Matrix<T> where T: Copy + Mul<Output=T> {
 	type Output = Self;
 	fn mul(self, other: T) -> Self {
@@ -792,6 +813,34 @@ mod test {
 					vec![320, 335]
 				]);
 				assert_eq!(a * b, expected_product)
+			}
+
+		}
+
+		mod vector_multiplication {
+
+			use super::*;
+
+			#[test]
+			fn identity() {
+				let m = Matrix::new(vec![
+					vec![1, 0],
+					vec![0, 1]
+				]);
+				let v = Vector::new(vec![1, 2]);
+				let expected_product = Vector::new(vec![1, 2]);
+				assert_eq!(m * v, expected_product)
+			}
+
+			#[test]
+			fn standard() {
+				let m = Matrix::new(vec![
+					vec![1, 2],
+					vec![3, 4]
+				]);
+				let v = Vector::new(vec![1, 2]);
+				let expected_product = Vector::new(vec![5, 11]);
+				assert_eq!(m * v, expected_product)
 			}
 
 		}
