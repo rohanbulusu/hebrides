@@ -296,7 +296,7 @@ impl Matrix32{
 
 	/// Creates a homogenous transformation matrix that will cause a vector to point at 
 	/// `dir`, using `up` for orientation.
-	pub fn look_at_rh(eye: Vector<f32>, dir: Vector<f32>, up: Vector<f32>) -> Matrix32 {
+	pub fn look_at_rh(eye: &Vector<f32>, dir: &Vector<f32>, up: &Vector<f32>) -> Matrix32 {
 		let f = dir.normalized();
 		let s = f.cross(&up).normalized();
 		let u = s.cross(&f);
@@ -310,7 +310,7 @@ impl Matrix32{
 	}
 
 	/// Creates a perspective matrix from the given parameters.
-	pub fn perspective(fovy: f32, aspect: f32, znear: f32, zfar: f32) -> Matrix32 {
+	pub fn perspective(fovy: &f32, aspect: &f32, znear: &f32, zfar: &f32) -> Matrix32 {
 		let f = 1.0 / (fovy / 2.0).tan();
 		Matrix::new(vec![
 			vec![f / aspect, 0.0, 0.0, 0.0],
