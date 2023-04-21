@@ -224,8 +224,8 @@ impl MatrixDimensions {
 
 /// Implementation for a finite-dimensional matrix over T.
 pub struct Matrix<T> {
-	rows: Vec<Vec<T>>,
-	cols: Vec<Vec<T>>,
+	pub rows: Vec<Vec<T>>,
+	pub cols: Vec<Vec<T>>,
 	dims: MatrixDimensions
 }
 
