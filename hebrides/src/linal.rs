@@ -179,6 +179,13 @@ impl<T> Mul<Self> for Vector<T> where T: Copy + Mul<Output=T> + Add<Output=T> {
 	}
 }
 
+impl<T> Mul<T> for Vector<T> where T: Copy + Mul<Output=T> {
+	type Output = Self;
+	fn mul(self, other: T) -> Self {
+		Vector::new(self.components.iter().map(|x| *x * other).collect())
+	}
+}
+
 impl<T> Div<T> for Vector<T> where T: Copy + Div<Output=T> {
 	type Output = Self;
 	fn div(mut self, other: T) -> Self {
