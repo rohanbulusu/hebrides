@@ -202,8 +202,10 @@ impl<T> Neg for Vector<T> where T: Copy + Neg<Output=T> {
 
 /// Helper struct carrying the dimensions of a [`Matrix`].
 #[derive(Copy, Clone)]
-struct MatrixDimensions {
+pub struct MatrixDimensions {
+	/// Number of rows in the given `Matrix`
 	pub num_rows: usize,
+	/// Number of columns in the given `Matrix`
 	pub num_cols: usize
 }
 
@@ -224,8 +226,11 @@ impl MatrixDimensions {
 
 /// Implementation for a finite-dimensional matrix over T.
 pub struct Matrix<T> {
+	/// Rows of the `Matrix`
 	pub rows: Vec<Vec<T>>,
+	/// Columns of the `Matrix`
 	pub cols: Vec<Vec<T>>,
+	/// Dimensions of the `Matrix`
 	pub dims: MatrixDimensions
 }
 
